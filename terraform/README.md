@@ -40,7 +40,7 @@ terraform plan
 ```
 
 Expected resources:
-- 1 Hetzner server (bastion-plex)
+- 1 Hetzner server (bastion-plex, default: CX11 in Ashburn, VA)
 - 1 Hetzner firewall (3 rules: SSH, WireGuard, Plex)
 - 1 Hetzner SSH key
 - 1 Cloudflare DNS A record (plex.yourdomain.com)
