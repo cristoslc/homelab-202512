@@ -1,0 +1,9 @@
+---
+# WireGuard Configuration (non-sensitive)
+# Sensitive keys stored in wireguard_vault.yml (encrypted with ansible-vault)
+
+wireguard_network: 10.8.0.0/24
+wireguard_server_ip: 10.8.0.1
+wireguard_client_ip: 10.8.0.2
+wireguard_port: 51820
+wireguard_interface: wg0

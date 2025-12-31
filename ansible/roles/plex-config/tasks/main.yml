@@ -1,0 +1,51 @@
+---
+# Validate Plex container configuration
+- name: Check if Docker is installed
+  command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Display Docker version
+  debug:
+    msg: "Docker version: {{ docker_version.stdout }}"
+
+- name: Check for Plex container
+  command: docker ps --filter name=plex --format '{% raw %}{{.Names}}{% endraw %}'
+  register: plex_container
+  changed_when: false
+
+- name: Verify Plex container exists
+  assert:
+    that:
+      - plex_container.stdout != ""
+    fail_msg: "Plex container not found. Please ensure Plex is running."
+    success_msg: "Plex container found: {{ plex_container.stdout }}"
+
+- name: Inspect Plex container port mappings
+  command: docker port {{ plex_container.stdout }}
+  register: plex_ports
+  changed_when: false
+  when: plex_container.stdout != ""
+
+- name: Display Plex port mappings
+  debug:
+    msg: "{{ plex_ports.stdout_lines }}"
+  when: plex_container.stdout != ""
+
+- name: Verify Plex port 32400 is published
+  assert:
+    that:
+      - "'32400' in plex_ports.stdout"
+    fail_msg: "Plex port 32400 is not published. Please check Docker run command."
+    success_msg: "Plex port 32400 is correctly published."
+  when: plex_container.stdout != ""
+
+- name: Test Plex web interface locally
+  uri:
+    url: http://localhost:32400/web
+    method: GET
+    status_code: 200
+  register: plex_health
+  retries: 3
+  delay: 5
+  until: plex_health.status == 200

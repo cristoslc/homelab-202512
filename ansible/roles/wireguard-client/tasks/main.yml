@@ -1,0 +1,65 @@
+---
+# WireGuard client configuration for home Docker host
+- name: Install WireGuard
+  apt:
+    name: wireguard
+    state: present
+    update_cache: yes
+
+- name: Enable IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    sysctl_set: yes
+    reload: yes
+
+- name: Create WireGuard configuration
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: '0600'
+  notify: restart wireguard
+
+- name: Configure iptables for WireGuard to Docker bridge
+  iptables:
+    chain: FORWARD
+    in_interface: wg0
+    out_interface: docker0
+    jump: ACCEPT
+    comment: Allow WireGuard to Docker
+  become: yes
+
+- name: Configure iptables for Docker bridge to WireGuard
+  iptables:
+    chain: FORWARD
+    in_interface: docker0
+    out_interface: wg0
+    jump: ACCEPT
+    comment: Allow Docker to WireGuard
+  become: yes
+
+- name: Configure iptables MASQUERADE for WireGuard
+  iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: wg0
+    jump: MASQUERADE
+    comment: Masquerade WireGuard traffic
+  become: yes
+
+- name: Install iptables-persistent to save rules
+  apt:
+    name: iptables-persistent
+    state: present
+
+- name: Save iptables rules
+  shell: |
+    iptables-save > /etc/iptables/rules.v4
+  become: yes
+
+- name: Enable and start WireGuard
+  systemd:
+    name: wg-quick@wg0
+    enabled: yes
+    state: started

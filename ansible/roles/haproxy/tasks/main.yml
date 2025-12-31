@@ -1,0 +1,21 @@
+---
+# HAProxy configuration for Plex traffic forwarding
+- name: Install HAProxy
+  apt:
+    name: haproxy
+    state: present
+    update_cache: yes
+
+- name: Configure HAProxy
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: '0644'
+    validate: 'haproxy -c -f %s'
+  notify: restart haproxy
+
+- name: Enable and start HAProxy
+  systemd:
+    name: haproxy
+    enabled: yes
+    state: started

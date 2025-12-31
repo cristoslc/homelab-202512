@@ -1,0 +1,72 @@
+---
+# Base security hardening for bastion VPS
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install security packages
+  apt:
+    name:
+      - ufw
+      - fail2ban
+    state: present
+
+- name: Configure UFW defaults
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: 'incoming', policy: 'deny' }
+    - { direction: 'outgoing', policy: 'allow' }
+
+- name: Allow SSH through UFW
+  ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+
+- name: Allow WireGuard through UFW
+  ufw:
+    rule: allow
+    port: '51820'
+    proto: udp
+
+- name: Allow Plex through UFW
+  ufw:
+    rule: allow
+    port: '32400'
+    proto: tcp
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+
+- name: Disable SSH password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    state: present
+  notify: restart sshd
+
+- name: Disable SSH root login with password
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin prohibit-password'
+    state: present
+  notify: restart sshd
+
+- name: Configure fail2ban SSH jail
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+  notify: restart fail2ban
+
+- name: Ensure fail2ban is enabled and started
+  systemd:
+    name: fail2ban
+    enabled: yes
+    state: started

@@ -1,0 +1,9 @@
+[Interface]
+Address = 10.8.0.2/24
+PrivateKey = {{ wg_client_private_key }}
+
+[Peer]
+PublicKey = {{ wg_server_public_key }}
+Endpoint = {{ bastion_ip }}:51820
+AllowedIPs = 10.8.0.0/24
+PersistentKeepalive = 25

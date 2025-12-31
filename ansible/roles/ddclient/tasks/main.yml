@@ -1,0 +1,20 @@
+---
+# Dynamic DNS client for Cloudflare
+- name: Install ddclient
+  apt:
+    name: ddclient
+    state: present
+    update_cache: yes
+
+- name: Configure ddclient
+  template:
+    src: ddclient.conf.j2
+    dest: /etc/ddclient.conf
+    mode: '0600'
+  notify: restart ddclient
+
+- name: Enable and start ddclient
+  systemd:
+    name: ddclient
+    enabled: yes
+    state: started

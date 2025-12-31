@@ -1,0 +1,28 @@
+---
+# WireGuard server configuration for bastion VPS
+- name: Install WireGuard
+  apt:
+    name: wireguard
+    state: present
+    update_cache: yes
+
+- name: Enable IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    sysctl_set: yes
+    reload: yes
+
+- name: Create WireGuard configuration
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: '0600'
+  notify: restart wireguard
+
+- name: Enable and start WireGuard
+  systemd:
+    name: wg-quick@wg0
+    enabled: yes
+    state: started

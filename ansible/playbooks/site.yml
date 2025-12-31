@@ -1,0 +1,40 @@
+---
+# Master Orchestration Playbook
+# Deploys complete homelab infrastructure in correct order
+
+- name: Deploy Homelab Infrastructure
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Display deployment banner
+      debug:
+        msg:
+          - "========================================="
+          - "  Homelab Infrastructure Deployment"
+          - "========================================="
+          - "This will configure:"
+          - "  1. Bastion VPS (WireGuard, HAProxy, security)"
+          - "  2. Home Server (WireGuard client, Plex validation)"
+          - ""
+
+- name: Configure Bastion VPS
+  import_playbook: bastion.yml
+
+- name: Configure Home Server
+  import_playbook: homeserver.yml
+
+- name: Deployment Complete
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Display success message
+      debug:
+        msg:
+          - "========================================="
+          - "  Deployment Complete!"
+          - "========================================="
+          - "Next steps:"
+          - "  1. Verify WireGuard tunnel: ssh bastion 'wg show'"
+          - "  2. Test connectivity: ping {{ wireguard_client_ip }}"
+          - "  3. Run validation: ./scripts/validate-day1.sh"
+          - ""

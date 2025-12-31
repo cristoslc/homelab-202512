@@ -1,0 +1,20 @@
+---
+# Example inventory file
+# Generate real inventory with: ./scripts/generate-inventory.sh
+
+all:
+  vars:
+    ansible_user: root
+    ansible_python_interpreter: /usr/bin/python3
+    plex_domain: plex.example.com
+    bastion_ip: 1.2.3.4
+
+bastion:
+  hosts:
+    bastion_vps:
+      ansible_host: 1.2.3.4
+
+homeserver:
+  hosts:
+    home_docker:
+      ansible_connection: local

@@ -1,0 +1,29 @@
+---
+# Bastion VPS Configuration
+# Configures WireGuard server, HAProxy, ddclient, and base security
+
+- name: Configure Bastion VPS
+  hosts: bastion
+  become: yes
+
+  roles:
+    - role: base-security
+      tags: ['security', 'base']
+
+    - role: wireguard-server
+      tags: ['wireguard', 'network']
+
+    - role: haproxy
+      tags: ['haproxy', 'proxy']
+
+    - role: ddclient
+      tags: ['ddclient', 'dns']
+
+  post_tasks:
+    - name: Display bastion configuration summary
+      debug:
+        msg:
+          - "Bastion VPS configured successfully"
+          - "WireGuard server: {{ wireguard_server_ip }}"
+          - "Listening on: {{ wireguard_port }}/udp"
+          - "HAProxy forwarding :32400 -> {{ wireguard_client_ip }}:32400"

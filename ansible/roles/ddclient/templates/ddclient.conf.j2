@@ -1,0 +1,10 @@
+daemon=300
+syslog=yes
+ssl=yes
+
+protocol=cloudflare
+use=web, web=checkip.dyndns.com, web-skip='IP Address'
+zone={{ cloudflare_zone }}
+login=token
+password={{ cloudflare_api_token }}
+{{ plex_domain }}

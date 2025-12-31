@@ -1,0 +1,23 @@
+---
+# Home Server Configuration
+# Configures WireGuard client and validates Plex container
+
+- name: Configure Home Docker Host
+  hosts: homeserver
+  become: yes
+
+  roles:
+    - role: wireguard-client
+      tags: ['wireguard', 'network']
+
+    - role: plex-config
+      tags: ['plex', 'validation']
+
+  post_tasks:
+    - name: Display home server configuration summary
+      debug:
+        msg:
+          - "Home Docker host configured successfully"
+          - "WireGuard client: {{ wireguard_client_ip }}"
+          - "Connected to bastion: {{ bastion_ip }}:{{ wireguard_port }}"
+          - "Plex container validated and accessible"
