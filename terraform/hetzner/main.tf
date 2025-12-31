@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.45"
+    }
+  }
+}
+
 # SSH Key for Bastion Access
 resource "hcloud_ssh_key" "bastion" {
   name       = "${var.server_name}-key"
