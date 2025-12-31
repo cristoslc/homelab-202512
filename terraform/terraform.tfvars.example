@@ -31,4 +31,4 @@ ssh_public_key = "ssh-ed25519 AAAAC3... your-email@example.com"
 # server_name     = "bastion-plex"
 # server_type     = "cx11"          # CX11: 1 vCPU, 2GB RAM, ~€4/month
 # server_location = "ash"           # ash (Ashburn, VA), hil (Hillsboro, OR), nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki)
-# server_image    = "ubuntu-22.04"
+# server_image    = "ubuntu-24.04"

@@ -99,7 +99,7 @@ terraform apply
 Type `yes` when prompted.
 
 **What happens:**
-- Hetzner provisions CX11 VPS (~€4/month) with Ubuntu 22.04
+- Hetzner provisions CX11 VPS (~€4/month) with Ubuntu 24.04 LTS
 - Firewall rules configured automatically
 - SSH key injected for root access
 - Cloudflare creates plex.yourdomain.com → bastion IP

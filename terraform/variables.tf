@@ -36,7 +36,7 @@ variable "server_location" {
 variable "server_image" {
   description = "Server OS image"
   type        = string
-  default     = "ubuntu-22.04"
+  default     = "ubuntu-24.04"
 }
 
 variable "ssh_public_key" {

@@ -180,7 +180,7 @@ terraform/
 
 | Type | Name | Purpose |
 |------|------|---------|
-| `hcloud_server` | bastion-plex | Ubuntu 22.04 VPS |
+| `hcloud_server` | bastion-plex | Ubuntu 24.04 LTS VPS |
 | `hcloud_firewall` | bastion-plex-firewall | SSH, WireGuard, Plex ports |
 | `hcloud_ssh_key` | bastion-plex-key | SSH authentication |
 | `cloudflare_record` | plex.yourdomain.com | DNS A record |
