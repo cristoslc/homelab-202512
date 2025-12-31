@@ -1,0 +1,34 @@
+# Copy this file to terraform.tfvars and fill in your actual values
+# terraform.tfvars is gitignored and will not be committed
+
+# Hetzner Cloud API Token
+# Get from: https://console.hetzner.cloud/ -> Project -> Security -> API Tokens
+hcloud_token = "YOUR_HETZNER_API_TOKEN_HERE"
+
+# Cloudflare API Token
+# Get from: https://dash.cloudflare.com/profile/api-tokens
+# Required permissions: Zone.DNS (Edit)
+cloudflare_api_token = "YOUR_CLOUDFLARE_API_TOKEN_HERE"
+
+# Cloudflare Zone ID
+# Find in: https://dash.cloudflare.com/ -> Select your domain -> Overview (right sidebar)
+cloudflare_zone_id = "YOUR_CLOUDFLARE_ZONE_ID_HERE"
+
+# Your Domain
+# Example: "example.com"
+domain = "yourdomain.com"
+
+# Plex Subdomain (optional, default: plex)
+# This will create plex.yourdomain.com
+plex_subdomain = "plex"
+
+# SSH Public Key
+# Generate with: ssh-keygen -t ed25519 -C "bastion-plex"
+# Use the contents of ~/.ssh/id_ed25519.pub
+ssh_public_key = "ssh-ed25519 AAAAC3... your-email@example.com"
+
+# Server Configuration (optional, defaults provided)
+# server_name     = "bastion-plex"
+# server_type     = "cx11"          # CX11: 1 vCPU, 2GB RAM, ~€4/month
+# server_location = "nbg1"          # nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki)
+# server_image    = "ubuntu-22.04"

@@ -1,0 +1,515 @@
+# Product Requirements Document: Homelab Day 1 - Plex Direct Connection
+
+## Overview
+
+**Problem**: Plex currently routes all traffic through relay servers due to lack of direct network path from internet to home server. This causes degraded streaming performance, bandwidth costs, and unreliable connections for users.
+
+**Solution**: Establish a bastion architecture using a Hetzner VPS with WireGuard VPN to create a secure tunnel between internet users and the home Plex server. All infrastructure deployed via Infrastructure as Code (Terraform + Ansible) with zero manual steps.
+
+**Target Users**:
+- Primary: Homelab administrator (deployment and maintenance)
+- Secondary: Plex users (improved streaming experience)
+
+**Value Delivered**: By end of Day 1, Plex users connect directly to home server through secure WireGuard tunnel, eliminating relay usage and providing optimal streaming performance.
+
+## Core Features
+
+### 1. Bastion VPS Provisioning
+**What**: Automated provisioning of Hetzner Cloud VPS with firewall rules and SSH access
+**Why**: Provides internet-accessible endpoint with public IP for tunnel termination
+**How**: Terraform Hetzner provider creates VPS, configures firewall (SSH, WireGuard 51820/udp, Plex 32400/tcp), injects SSH keys
+
+### 2. DNS Automation
+**What**: Cloudflare DNS A record creation pointing plex.yourdomain.com to bastion IP
+**Why**: Eliminates manual DNS configuration, enables declarative infrastructure
+**How**: Terraform Cloudflare provider manages A records, outputs FQDN for validation
+
+### 3. WireGuard Tunnel (Bastion Server)
+**What**: WireGuard server running as systemd service on bastion VPS
+**Why**: Secure, performant VPN tunnel to home network
+**How**: Ansible role installs WireGuard, generates keys, configures wg0 interface at 10.8.0.1/24, enables systemd service
+
+### 4. WireGuard Tunnel (Home Client)
+**What**: WireGuard client running as systemd service on Docker host (NOT in container)
+**Why**: Preserves Docker network isolation while enabling tunnel connectivity without network_mode: host
+**How**: Ansible role installs WireGuard on host OS, configures wg0 at 10.8.0.2/24, enables IP forwarding, configures firewall rules for wg0 ↔ docker0
+
+### 5. HAProxy TCP Forwarding
+**What**: HAProxy on bastion forwarding port 32400/tcp to 10.8.0.2:32400
+**Why**: Routes external Plex traffic through tunnel to home server
+**How**: Ansible role installs HAProxy, templates frontend/backend config, enables systemd service
+
+### 6. Dynamic DNS Updates
+**What**: ddclient monitoring home IP and updating Cloudflare if changed
+**Why**: Ensures tunnel stays connected if home ISP changes IP
+**How**: Ansible role installs ddclient, configures Cloudflare integration with API token
+
+### 7. Base Security Hardening
+**What**: UFW firewall, fail2ban, SSH hardening on bastion
+**Why**: Secure internet-facing VPS against common attacks
+**How**: Ansible role configures UFW rules, fail2ban jails, disables password auth, configures SSH keys only
+
+### 8. Plex Configuration Validation
+**What**: Verification that Plex container networking is correctly configured for tunnel access
+**Why**: Ensures published ports and network settings align with architecture
+**How**: Ansible role checks Docker container config, verifies port 32400 published, validates bridge network mode
+
+### 9. Automated Deployment Orchestration
+**What**: Single-command deployment executing Terraform and Ansible in correct sequence
+**Why**: Reproducible, idempotent infrastructure deployment
+**How**: Master Ansible playbook (site.yml) orchestrates bastion.yml and homeserver.yml with inventory auto-generated from Terraform outputs
+
+### 10. Validation and Testing
+**What**: Automated scripts verifying tunnel connectivity, service health, external access
+**Why**: Proves system works before declaring success
+**How**: Bash scripts test WireGuard handshake, ping across tunnel, curl Plex from external network, DNS resolution
+
+## User Experience
+
+### User Personas
+
+**1. Homelab Administrator (You)**
+- Technical proficiency: High (comfortable with Terraform, Ansible, Docker, networking)
+- Goals: Deploy robust infrastructure quickly, maintain IaC principles, maximize automation
+- Pain points: Manual steps break reproducibility, fragmented deployment processes, delayed value delivery
+- Success criteria: Single command deployment, zero manual steps, working Plex by end of session 5
+
+**2. Plex User (Friends/Family)**
+- Technical proficiency: Low (just wants to watch content)
+- Goals: Reliable streaming, fast load times, no buffering
+- Pain points: Current relay causing quality degradation, connection failures
+- Success criteria: Transparent improvement (they notice better performance but no config changes on their end)
+
+### Key User Flows
+
+**Flow 1: Initial Deployment (Administrator)**
+1. Clone repository
+2. Configure secrets in terraform.tfvars (API tokens, domain, SSH key)
+3. Run `terraform apply` (provisions VPS, creates DNS)
+4. Run `./scripts/generate-inventory.sh` (creates Ansible inventory from Terraform outputs)
+5. Run `ansible-playbook playbooks/site.yml` (configures bastion and home server)
+6. Run `./scripts/validate-day1.sh` (automated testing)
+7. Verify external access via mobile network
+
+**Flow 2: Plex User Connecting to Stream**
+1. Open Plex app/web
+2. App resolves plex.yourdomain.com → bastion IP (via Cloudflare)
+3. Connection hits HAProxy on bastion:32400
+4. HAProxy forwards to 10.8.0.2:32400 (through WireGuard tunnel)
+5. Docker host routes to docker0 bridge → Plex container
+6. Stream begins (direct connection, no relay)
+
+**Flow 3: Infrastructure Updates (Administrator)**
+1. Modify Terraform/Ansible code
+2. Run `terraform plan` (review changes)
+3. Run `terraform apply && ansible-playbook playbooks/site.yml`
+4. Validate with scripts
+
+### Deployment UX Considerations
+
+- **Progress Visibility**: Terraform and Ansible provide built-in progress output
+- **Error Handling**: Clear error messages from tools, validation scripts catch common issues
+- **Idempotency**: Re-running commands is safe (Terraform state, Ansible idempotent modules)
+- **Rollback**: Terraform destroy removes all resources, Ansible playbooks can be reversed
+- **Documentation**: README.md provides step-by-step deployment, troubleshooting section for common issues
+
+## Technical Architecture
+
+### System Components
+
+**Internet-Facing Layer (Bastion VPS)**
+- OS: Ubuntu 22.04 LTS
+- Cloud Provider: Hetzner Cloud
+- Services: WireGuard server, HAProxy, ddclient, UFW, fail2ban
+- Network: Public IP (assigned by Hetzner), wg0 interface at 10.8.0.1/24
+
+**Home Network Layer (Docker Host)**
+- OS: Existing Linux host (assumed Ubuntu/Debian-based)
+- Services: WireGuard client, Docker Engine, Plex container
+- Network: wg0 interface at 10.8.0.2/24, docker0 bridge (default Docker)
+
+**Traffic Flow**
+```
+Internet User
+  ↓ DNS: plex.yourdomain.com → Bastion Public IP
+Bastion VPS (HAProxy :32400)
+  ↓ TCP Forwarding
+WireGuard Tunnel (51820/udp)
+  ↓ Encrypted Connection
+Docker Host (10.8.0.2:32400)
+  ↓ Host Port Forwarding
+Docker Bridge (docker0)
+  ↓ Container Port Mapping
+Plex Container (:32400)
+```
+
+### Data Models
+
+**Terraform State**
+- Hetzner VPS resource (ID, IP, firewall rules)
+- Cloudflare DNS record (zone, name, value)
+- SSH key resources
+- Outputs: bastion_ip, plex_fqdn, wireguard_port
+
+**Ansible Inventory**
+```yaml
+all:
+  children:
+    bastion:
+      hosts:
+        bastion-vps:
+          ansible_host: <terraform_output.bastion_ip>
+          ansible_user: root
+    homeserver:
+      hosts:
+        home-docker:
+          ansible_host: 10.8.0.2
+          ansible_connection: local  # Run on home server itself
+```
+
+**WireGuard Configuration**
+- Server: 10.8.0.1/24, ListenPort 51820, AllowedIPs 10.8.0.2/32
+- Client: 10.8.0.2/24, Endpoint bastion_ip:51820, AllowedIPs 0.0.0.0/0
+
+**HAProxy Configuration**
+```
+frontend plex_frontend
+  bind *:32400
+  mode tcp
+  default_backend plex_backend
+
+backend plex_backend
+  mode tcp
+  server home-plex 10.8.0.2:32400
+```
+
+### APIs and Integrations
+
+**Hetzner Cloud API** (Terraform Provider)
+- Server creation/deletion
+- Firewall rule management
+- SSH key injection
+- Network configuration
+
+**Cloudflare API** (Terraform Provider)
+- Zone lookup
+- A record creation/update/deletion
+- API token authentication
+
+**Ansible Modules**
+- `apt`: Package installation
+- `template`: Config file generation (Jinja2)
+- `systemd`: Service management
+- `ufw`: Firewall rules
+- `command/shell`: WireGuard key generation, Docker verification
+- `copy`: File deployment
+
+### Infrastructure Requirements
+
+**Bastion VPS (Hetzner)**
+- Instance Type: CX11 or higher (2GB RAM minimum recommended)
+- Storage: 20GB+ SSD
+- Bandwidth: Unlimited (scales with Plex usage)
+- Location: Choose closest to home or users for latency
+- Network: Public IPv4 required
+
+**Home Docker Host**
+- Existing Docker installation
+- Plex container running with published port 32400
+- Sufficient upstream bandwidth (Plex streaming requirements)
+- Static home IP or dynamic DNS capability
+- Firewall allowing outbound UDP 51820 to bastion
+
+**External Dependencies**
+- Domain registered and managed in Cloudflare
+- Hetzner Cloud account + API token
+- Cloudflare account + API token (with DNS edit permissions)
+- SSH key pair for VPS access
+
+**Developer Workstation**
+- Terraform >= 1.6
+- Ansible >= 2.15
+- SSH client
+- Bash shell (for scripts)
+- Git (for version control)
+
+## Development Roadmap
+
+### Session 1: Terraform Foundation
+**Scope**: Complete Terraform infrastructure provisioning
+**Deliverables**:
+- `terraform/main.tf` - Root module with provider configurations
+- `terraform/variables.tf` - Input variable definitions
+- `terraform/outputs.tf` - Bastion IP, DNS FQDN, WireGuard port
+- `terraform/hetzner/main.tf` - VPS, firewall, SSH key resources
+- `terraform/cloudflare/main.tf` - DNS A record for plex subdomain
+- `terraform.tfvars.example` - Template for secrets
+- Successfully deployed VPS with public IP and DNS record
+
+**Build Specification**:
+- Hetzner provider configured with API token
+- VPS size configurable via variable (default: cx11)
+- Firewall rules: 22/tcp (SSH), 51820/udp (WireGuard), 32400/tcp (Plex)
+- Cloudflare provider configured with API token and zone ID
+- A record: plex.${var.domain} → bastion public IP
+- Outputs formatted for Ansible inventory generation
+
+### Session 2: Ansible Repository Structure
+**Scope**: Ansible framework and inventory automation
+**Deliverables**:
+- `ansible/ansible.cfg` - Ansible configuration
+- `ansible/inventory/hosts.example.yml` - Inventory template
+- `ansible/roles/` - Empty role directories for all 7 roles
+- `scripts/generate-inventory.sh` - Script to populate inventory from Terraform
+- WireGuard key generation automation (public/private keypair)
+- Secrets management documentation (ansible-vault or SOPS)
+
+**Build Specification**:
+- Ansible directory follows best practices (roles/, playbooks/, inventory/)
+- generate-inventory.sh reads `terraform output -json` and creates inventory/hosts.yml
+- Script generates WireGuard keypairs (wg genkey | tee privatekey | wg pubkey > publickey)
+- Role templates include tasks/main.yml, handlers/main.yml, templates/, files/
+- Documentation on encrypting secrets with ansible-vault
+
+### Session 3: Bastion Playbook
+**Scope**: Complete bastion VPS configuration
+**Deliverables**:
+- `ansible/roles/wireguard-server/` - WireGuard server installation and config
+- `ansible/roles/haproxy/` - HAProxy installation and TCP forwarding
+- `ansible/roles/ddclient/` - Dynamic DNS client configuration
+- `ansible/roles/base-security/` - UFW, fail2ban, SSH hardening
+- `ansible/playbooks/bastion.yml` - Orchestrates bastion roles
+- Fully configured bastion VPS ready for tunnel
+
+**Build Specification**:
+- wireguard-server: Install wireguard package, template /etc/wireguard/wg0.conf, enable wg-quick@wg0 service, configure PostUp/PostDown iptables rules
+- haproxy: Install haproxy, template /etc/haproxy/haproxy.cfg with plex frontend/backend, enable service
+- ddclient: Install ddclient, template /etc/ddclient.conf with Cloudflare API settings, enable service
+- base-security: Configure UFW (deny incoming except 22/51820/32400), install fail2ban with SSH jail, disable password auth in sshd_config, ensure SSH key auth only
+- Playbook runs roles in order: base-security → wireguard-server → haproxy → ddclient
+
+### Session 4: Home Server Playbook
+**Scope**: Configure home Docker host for tunnel
+**Deliverables**:
+- `ansible/roles/wireguard-client/` - WireGuard client installation and config
+- `ansible/roles/plex-config/` - Plex container verification
+- `ansible/playbooks/homeserver.yml` - Orchestrates home server roles
+- Home server connected to bastion via WireGuard
+
+**Build Specification**:
+- wireguard-client: Install wireguard, template /etc/wireguard/wg0.conf (peer to bastion), enable wg-quick@wg0, set net.ipv4.ip_forward=1 in /etc/sysctl.conf, configure iptables for wg0 ↔ docker0 FORWARD ACCEPT
+- plex-config: Verify Plex container exists (docker ps), check port 32400 published, validate bridge network mode (not host), document any required network setting changes
+- Playbook runs locally on home server (ansible_connection: local) or via SSH if accessible
+
+### Session 5: Deployment and Validation
+**Scope**: End-to-end deployment and testing
+**Deliverables**:
+- `ansible/playbooks/site.yml` - Master playbook importing bastion.yml and homeserver.yml
+- `scripts/deploy.sh` - Wrapper script: terraform apply → generate-inventory → ansible-playbook site.yml
+- `scripts/validate-day1.sh` - Validation suite
+- Working Plex direct connection validated from external network
+
+**Build Specification**:
+- site.yml imports bastion.yml, then homeserver.yml (order matters: bastion must exist first for peer config)
+- deploy.sh has error handling, runs terraform/ansible in sequence, shows clear progress
+- validate-day1.sh tests:
+  1. WireGuard tunnel status on both sides (ansible bastion -m shell -a "wg show")
+  2. Ping across tunnel (ansible bastion -m shell -a "ping -c 3 10.8.0.2")
+  3. HAProxy listening on 32400 (ss -tlnp | grep 32400)
+  4. Plex accessible via tunnel (curl -I http://10.8.0.2:32400/web from bastion)
+  5. DNS resolution (dig plex.yourdomain.com)
+  6. External access test (manual: phone on cellular network accessing plex.yourdomain.com:32400/web)
+- All tests pass, Plex shows direct connection in console (no relay)
+
+## Logical Dependency Chain
+
+### Foundation (Must be first)
+1. **Terraform Foundation (Session 1)** - Cannot configure servers that don't exist
+   - Outputs: bastion_ip, DNS record created
+
+### Infrastructure Layer (Depends on Foundation)
+2. **Ansible Structure (Session 2)** - Requires Terraform outputs for inventory
+   - Outputs: Inventory file, WireGuard keys generated
+
+### Service Configuration (Depends on Infrastructure)
+3. **Bastion Playbook (Session 3)** - Requires inventory and WireGuard keys
+   - Outputs: Bastion fully configured, WireGuard server running
+4. **Home Server Playbook (Session 4)** - Requires bastion WireGuard server to exist for peer config
+   - Outputs: Home server WireGuard client connected to bastion
+
+### Validation (Depends on Everything)
+5. **Deployment & Validation (Session 5)** - Requires all prior sessions complete
+   - Outputs: Validated working system, automated deployment process
+
+### Atomic Buildable Features
+Each session produces a working artifact:
+- Session 1: VPS exists, DNS resolves
+- Session 2: Ansible can run (even if playbooks empty)
+- Session 3: Bastion services running (even if home server not connected yet)
+- Session 4: Tunnel established (even if validation scripts not written)
+- Session 5: Full system validated and automated
+
+## Risks and Mitigations
+
+### Technical Challenges
+
+**Risk**: WireGuard routing complexity between host and containers
+**Mitigation**: Use WireGuard on host OS (not containerized), rely on Docker's standard port publishing, verify with thorough testing in Session 5
+
+**Risk**: Firewall misconfigurations blocking tunnel or Plex traffic
+**Mitigation**: Explicit firewall rule validation in base-security role, validation scripts test connectivity at each layer
+
+**Risk**: Terraform state corruption or conflicts
+**Mitigation**: Use Terraform remote state (future enhancement), document state recovery procedures, test terraform destroy/apply cycles
+
+**Risk**: Ansible playbook idempotency issues causing repeated runs to fail
+**Mitigation**: Use idempotent modules (systemd, template, apt with state=present), test playbook re-runs during development
+
+**Risk**: DNS propagation delays preventing immediate validation
+**Mitigation**: Use Cloudflare (fast propagation), validation scripts check DNS before testing access
+
+**Risk**: Home ISP blocking outbound UDP or VPN traffic
+**Mitigation**: Document ISP requirements, provide fallback to TCP-based WireGuard if needed (future enhancement)
+
+### MVP Definition
+
+**Risk**: Scope creep adding features beyond "Plex working"
+**Mitigation**: Strict definition of Day 1 MVP:
+- MUST HAVE: Plex accessible via plex.yourdomain.com from external network, no relay usage
+- MUST HAVE: Automated deployment (no manual steps)
+- MUST HAVE: Basic security (firewall, SSH hardening)
+- NICE TO HAVE (defer to Day 2+): HTTPS/TLS, monitoring, backups, Jellyseerr
+
+**Risk**: Over-engineering infrastructure automation
+**Mitigation**: Use proven patterns (standard WireGuard configs, basic HAProxy TCP forwarding), avoid custom scripts where Ansible modules exist
+
+### Resource Constraints
+
+**Risk**: Insufficient time to complete all 5 sessions in Day 1
+**Mitigation**: Sessions designed to be 30-60 minutes each, focus on working code over documentation, use LLM to generate bulk of Terraform/Ansible
+
+**Risk**: Home network accessibility issues for Ansible deployment
+**Mitigation**: Document both remote SSH and local execution options for homeserver.yml playbook
+
+**Risk**: API rate limits from Hetzner or Cloudflare during testing
+**Mitigation**: Use terraform plan before apply, minimize destroy/create cycles, cache Ansible facts
+
+**Risk**: Cost overruns from cloud resources
+**Mitigation**: Use smallest VPS size (CX11 ~$4/month), document cost expectations, provide terraform destroy for easy cleanup
+
+## Appendix
+
+### Network Topology Diagram
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         INTERNET                             │
+└───────────────┬─────────────────────────────────────────────┘
+                │
+                │ plex.yourdomain.com
+                │ DNS: Cloudflare A Record
+                ↓
+┌───────────────────────────────────────────────────────────────┐
+│  BASTION VPS (Hetzner)                                        │
+│  Public IP: <assigned by Hetzner>                             │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │  HAProxy (:32400)                                        │ │
+│  │  Frontend: *:32400 → Backend: 10.8.0.2:32400            │ │
+│  └──────────────────┬───────────────────────────────────────┘ │
+│                     │                                          │
+│  ┌──────────────────▼───────────────────────────────────────┐ │
+│  │  WireGuard Server (wg0)                                  │ │
+│  │  IP: 10.8.0.1/24                                         │ │
+│  │  Port: 51820/udp                                         │ │
+│  │  Peer: 10.8.0.2 (home server)                           │ │
+│  └──────────────────┬───────────────────────────────────────┘ │
+└────────────────────┼────────────────────────────────────────┘
+                     │
+                     │ WireGuard Tunnel
+                     │ Encrypted UDP 51820
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│  HOME DOCKER HOST                                            │
+│  Home IP: <dynamic or static>                                │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │  WireGuard Client (wg0)                                  │ │
+│  │  IP: 10.8.0.2/24                                         │ │
+│  │  Peer: bastion_ip:51820                                 │ │
+│  │  Listens on: wg0 interface                              │ │
+│  └──────────────────┬───────────────────────────────────────┘ │
+│                     │                                          │
+│                     │ IP Forwarding: wg0 ↔ docker0           │
+│                     │                                          │
+│  ┌──────────────────▼───────────────────────────────────────┐ │
+│  │  Docker Bridge (docker0)                                 │ │
+│  │  Network: 172.17.0.0/16                                  │ │
+│  │  Port Publish: -p 32400:32400                           │ │
+│  └──────────────────┬───────────────────────────────────────┘ │
+│                     │                                          │
+│  ┌──────────────────▼───────────────────────────────────────┐ │
+│  │  Plex Container                                          │ │
+│  │  Internal IP: 172.17.0.X                                 │ │
+│  │  Port: 32400                                             │ │
+│  └──────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### IP Allocation Table
+| Host          | WireGuard IP | Role                  | Public IP           |
+|---------------|--------------|-----------------------|---------------------|
+| Bastion VPS   | 10.8.0.1/24  | WireGuard server      | Assigned by Hetzner |
+| Home Server   | 10.8.0.2/24  | WireGuard client      | Home ISP (dynamic)  |
+
+### Port Allocation Table
+| Port  | Protocol | Service       | Direction             | Purpose                    |
+|-------|----------|---------------|-----------------------|----------------------------|
+| 22    | TCP      | SSH           | Internet → Bastion    | VPS management             |
+| 51820 | UDP      | WireGuard     | Home → Bastion        | VPN tunnel                 |
+| 32400 | TCP      | Plex/HAProxy  | Internet → Bastion    | Plex web access            |
+| 32400 | TCP      | Plex          | Docker host → Container| Container port publishing  |
+
+### Firewall Rules Summary
+
+**Bastion VPS (UFW)**
+```
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+ufw allow 51820/udp
+ufw allow 32400/tcp
+ufw enable
+```
+
+**Home Server (iptables via WireGuard)**
+```
+# IP Forwarding
+net.ipv4.ip_forward = 1
+
+# Forward between wg0 and docker0
+iptables -A FORWARD -i wg0 -o docker0 -j ACCEPT
+iptables -A FORWARD -i docker0 -o wg0 -j ACCEPT
+
+# Masquerading for WireGuard subnet
+iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o docker0 -j MASQUERADE
+```
+
+### Key Technical Decisions
+
+**Decision**: WireGuard on host OS, not containerized
+**Rationale**: Avoids complex inter-container routing, preserves Docker network isolation, standard systemd service management
+**Alternative Rejected**: WireGuard in container requires network namespace sharing or host networking, defeats isolation goals
+
+**Decision**: Terraform for infrastructure, Ansible for configuration
+**Rationale**: Terraform excellent for cloud resources (Hetzner, Cloudflare), Ansible excellent for server configuration, clear separation of concerns
+**Alternative Rejected**: All-Terraform with provisioners (less idempotent), all-Ansible (harder to manage cloud resources)
+
+**Decision**: HAProxy for TCP forwarding
+**Rationale**: Proven, lightweight, simple TCP mode for Day 1
+**Future Enhancement**: Day 2 adds Caddy for HTTPS reverse proxy (Jellyseerr and other services)
+
+**Decision**: Single command deployment
+**Rationale**: Reproducibility, reduces human error, aligns with IaC principles
+**Alternative Rejected**: Manual step-by-step instructions (error-prone, not reproducible)
+
+**Decision**: Project directory contains only Day 1 scope
+**Rationale**: Focused delivery, working system at end of Day 1, can extend in new directories for Day 2-5
+**Future**: Create day2/, day3/ directories or use git branches for phased development

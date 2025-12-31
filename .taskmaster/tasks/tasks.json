@@ -1,0 +1,85 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Terraform Infrastructure Provisioning",
+        "description": "Provision Hetzner bastion VPS, firewall rules, SSH keys, and Cloudflare DNS A record for plex.yourdomain.com",
+        "details": "Create terraform/main.tf with hcloud provider (token from var.hcloud_token), CX11 server (Ubuntu 22.04, location nbg1), firewall (22/tcp, 51820/udp, 32400/tcp), SSH key injection. Cloudflare provider creates A record plex.${var.domain} -> server.ipv4_address. Outputs: bastion_ip, plex_fqdn. Use hcloud provider docs [registry.terraform.io/providers/hetznercloud/hcloud]. terraform.tfvars.example with hcloud_token, cloudflare_token, domain, ssh_public_key.",
+        "testStrategy": "terraform plan shows 1 server + 1 firewall + 1 dns record. terraform apply succeeds. terraform output -json bastion_ip valid IPv4. dig plex.yourdomain.com resolves to bastion IP. SSH root@bastion_ip succeeds with injected key.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "in-progress",
+        "subtasks": [],
+        "updatedAt": "2025-12-31T06:02:18.353Z"
+      },
+      {
+        "id": "2",
+        "title": "Ansible Repository Structure and Inventory Automation",
+        "description": "Setup Ansible roles structure and generate-inventory.sh script from Terraform outputs",
+        "details": "Create ansible/ansible.cfg, ansible/roles/{wireguard-server,haproxy,ddclient,base-security,wireguard-client,plex-config}/ (tasks/main.yml, templates/, handlers/). scripts/generate-inventory.sh: terraform output -json | jq -> inventory/hosts.yml with bastion:ansible_host={{bastion_ip}}, homeserver:ansible_connection=local. Generate WireGuard keys: wg genkey | tee /tmp/wg-server-private | wg pubkey > /tmp/wg-server-public (same for client). Use bastion example from [prasanthmj.github.io/terraform/terraform-hetzner-cloud-setup-example/].",
+        "testStrategy": "ansible-playbook --syntax-check playbooks/bastion.yml. ./scripts/generate-inventory.sh creates valid inventory/hosts.yml. ansible-inventory --list -i inventory/hosts.yml shows bastion and homeserver groups.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "3",
+        "title": "Bastion VPS Configuration Playbook",
+        "description": "Configure WireGuard server, HAProxy, ddclient, and base security on Hetzner VPS",
+        "details": "ansible/playbooks/bastion.yml imports roles: base-security -> wireguard-server -> haproxy -> ddclient. base-security: ufw default deny/allow, allow 22/51820/32400, fail2ban ssh jail, sshd_config PasswordAuthentication no. wireguard-server: apt install wireguard, template /etc/wireguard/wg0.conf (Address=10.8.0.1/24, ListenPort=51820, PrivateKey={{wg_server_private}}, Peer PublicKey={{wg_client_public}} AllowedIPs=10.8.0.2/32), systemd wg-quick@wg0, PostUp iptables FORWARD ACCEPT + MASQUERADE. haproxy: template frontend *:32400 mode tcp -> backend 10.8.0.2:32400. ddclient: template /etc/ddclient.conf Cloudflare API.",
+        "testStrategy": "ansible-playbook bastion.yml succeeds idempotently. SSH bastion 'wg show' shows interface wg0 active. ss -tlnp | grep 32400 shows HAProxy. ufw status shows correct rules. systemctl status wg-quick@wg0 haproxy ddclient all active.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "4",
+        "title": "Home Server WireGuard Client and Plex Validation",
+        "description": "Configure WireGuard client on Docker host OS and validate Plex container networking",
+        "details": "ansible/playbooks/homeserver.yml (connection: local): wireguard-client role installs wireguard, template wg0.conf (Address=10.8.0.2/24, PrivateKey={{wg_client_private}}, Peer={{bastion_ip}}:51820 PublicKey={{wg_server_public}}, AllowedIPs=0.0.0.0/0, PostUp iptables FORWARD wg0<->docker0 + MASQUERADE), sysctl net.ipv4.ip_forward=1, systemd enable wg-quick@wg0. plex-config: docker ps --filter name=plex, verify -p 32400:32400 published, bridge network_mode.",
+        "testStrategy": "ansible-playbook homeserver.yml succeeds. wg show on home shows handshake with bastion. ping 10.8.0.1 from home succeeds. From bastion: ping 10.8.0.2, curl -I http://10.8.0.2:32400/web returns HTTP 200.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2",
+          "3"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "5",
+        "title": "Master Deployment Orchestration and End-to-End Validation",
+        "description": "Create site.yml master playbook, deploy.sh wrapper, and validate-day1.sh test suite",
+        "details": "ansible/playbooks/site.yml: import_playbook bastion.yml then homeserver.yml. scripts/deploy.sh: terraform apply && generate-inventory.sh && ansible-playbook site.yml. scripts/validate-day1.sh: ansible bastion -m shell 'wg show', ping -c3 10.8.0.2, ss -tlnp|grep 32400, curl -I http://10.8.0.2:32400/web, dig plex.yourdomain.com. Manual: external network curl plex.yourdomain.com:32400/web.",
+        "testStrategy": "./scripts/deploy.sh succeeds end-to-end. ./scripts/validate-day1.sh all checks PASS. External mobile network: curl -I http://plex.yourdomain.com:32400/web returns Plex HTML. Plex dashboard shows 'Direct' connection (no relay).",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2025-12-31T06:02:18.355Z",
+      "taskCount": 5,
+      "completedCount": 0,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}
