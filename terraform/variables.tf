@@ -22,9 +22,9 @@ variable "server_name" {
 }
 
 variable "server_type" {
-  description = "Hetzner server type (e.g., cx11, cx21)"
+  description = "Hetzner server type (e.g., cpx11, cpx21 for US; cx11, cx21 for EU)"
   type        = string
-  default     = "cx11"
+  default     = "cpx11"
 }
 
 variable "server_location" {

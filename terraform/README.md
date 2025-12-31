@@ -40,7 +40,7 @@ terraform plan
 ```
 
 Expected resources:
-- 1 Hetzner server (bastion-plex, default: CX11 in Ashburn, VA)
+- 1 Hetzner server (bastion-plex, default: CPX11 in Ashburn, VA)
 - 1 Hetzner firewall (3 rules: SSH, WireGuard, Plex)
 - 1 Hetzner SSH key
 - 1 Cloudflare DNS A record (plex.yourdomain.com)
@@ -52,7 +52,7 @@ terraform apply
 ```
 
 Type `yes` to confirm. This will:
-- Provision a Hetzner CX11 VPS (~€4/month)
+- Provision a Hetzner CPX11 VPS (~€4-5/month)
 - Configure firewall rules (22/tcp, 51820/udp, 32400/tcp)
 - Create DNS A record pointing to bastion IP
 
@@ -129,7 +129,7 @@ terraform apply    # Create fresh
 
 ## Cost Estimate
 
-- **Hetzner CX11**: ~€4.51/month (€0.007/hour)
+- **Hetzner CPX11**: ~€4.51/month (€0.007/hour)
 - **Cloudflare DNS**: Free
 - **Total**: ~€4.51/month
 

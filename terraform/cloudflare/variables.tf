@@ -3,6 +3,12 @@ variable "cloudflare_zone_id" {
   type        = string
 }
 
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions"
+  type        = string
+  sensitive   = true
+}
+
 variable "domain" {
   description = "Your domain name (e.g., example.com)"
   type        = string
