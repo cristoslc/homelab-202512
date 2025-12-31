@@ -134,3 +134,4 @@ htmlcov/
 # package-lock.json
 # yarn.lock
 # Gemfile.lock
+.aider*
