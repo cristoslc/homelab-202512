@@ -1,0 +1,136 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+crash.log
+crash.*.log
+
+# Ansible
+*.retry
+ansible.log
+*.vault
+*vault*.yml
+vault_password.txt
+vault_pass.txt
+.vault_pass
+inventory/hosts.yml
+inventory/*.yml
+!inventory/hosts.example.yml
+group_vars/*/vault.yml
+host_vars/*/vault.yml
+
+# SSH Keys & Certificates
+*.pem
+*.key
+*.pub
+id_rsa*
+id_ed25519*
+*.crt
+*.csr
+known_hosts
+
+# Secrets & Credentials
+.env
+.env.*
+!.env.example
+*.secret
+*.secrets
+*-secrets.yml
+credentials.json
+secrets/
+.secrets/
+
+# WireGuard Keys
+wg_private.key
+wg_public.key
+privatekey
+publickey
+wg*.conf
+!wg*.conf.j2
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+*.out
+
+# Backup Files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+.cache/
+
+# Generated Files
+generated/
+output/
+*.auto.tfvars
+
+# Cloud Provider CLIs
+.hcloud/
+.aws/
+.azure/
+
+# Documentation Build
+docs/_build/
+site/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Lock files (optional - uncomment if using)
+# package-lock.json
+# yarn.lock
+# Gemfile.lock
