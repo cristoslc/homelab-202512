@@ -50,6 +50,17 @@ resource "hcloud_firewall" "bastion" {
     ]
   }
 
+  # Jellyfin HTTPS
+  rule {
+    direction = "in"
+    protocol  = "tcp"
+    port      = "8920"
+    source_ips = [
+      "0.0.0.0/0",
+      "::/0"
+    ]
+  }
+
   # HTTP (for Let's Encrypt certbot validation)
   rule {
     direction = "in"

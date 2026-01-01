@@ -74,6 +74,24 @@
     comment: Allow Docker to WireGuard
   become: yes
 
+- name: Configure iptables for WireGuard to custom Docker bridges
+  iptables:
+    chain: FORWARD
+    in_interface: wg0
+    out_interface: br-+
+    jump: ACCEPT
+    comment: Allow WireGuard to custom Docker bridges
+  become: yes
+
+- name: Configure iptables for custom Docker bridges to WireGuard
+  iptables:
+    chain: FORWARD
+    in_interface: br-+
+    out_interface: wg0
+    jump: ACCEPT
+    comment: Allow custom Docker bridges to WireGuard
+  become: yes
+
 - name: Configure iptables MASQUERADE for WireGuard
   iptables:
     table: nat

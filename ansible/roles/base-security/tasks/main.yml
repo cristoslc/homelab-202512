@@ -38,6 +38,12 @@
     port: '32400'
     proto: tcp
 
+- name: Allow Jellyfin through UFW
+  ufw:
+    rule: allow
+    port: '8920'
+    proto: tcp
+
 - name: Allow HTTP through UFW (for Let's Encrypt)
   ufw:
     rule: allow

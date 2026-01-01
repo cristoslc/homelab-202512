@@ -33,3 +33,15 @@ backend plex_backend
     option httpchk GET /web/index.html
     http-check expect status 200
     server plex_home 10.8.0.2:32400 check
+
+# HTTPS frontend - SSL termination on Jellyfin port 8920
+frontend jellyfin_https_frontend
+    bind *:8920 ssl crt /etc/haproxy/certs/{{ plex_domain }}.pem
+    mode http
+    default_backend jellyfin_backend
+
+backend jellyfin_backend
+    mode http
+    option httpchk GET /health
+    http-check expect status 200
+    server jellyfin_home 10.8.0.2:8096 check
