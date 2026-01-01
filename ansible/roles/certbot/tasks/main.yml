@@ -1,5 +1,12 @@
 ---
 # Certbot role for Let's Encrypt SSL certificates
+# Variables:
+#   letsencrypt_staging: true/false - Use Let's Encrypt staging environment (default: false)
+
+- name: Display certificate mode
+  debug:
+    msg: "{{ 'Using Let\\'s Encrypt STAGING environment (testing only)' if letsencrypt_staging | default(false) else 'Using Let\\'s Encrypt PRODUCTION environment' }}"
+
 - name: Install certbot and dependencies
   apt:
     name:
@@ -117,8 +124,14 @@
     certbot certonly --standalone --non-interactive --agree-tos
     --email {{ letsencrypt_email }}
     -d {{ plex_domain }}
+    {{ '--staging' if letsencrypt_staging | default(false) else '' }}
   when: not cert_exists.stat.exists
   register: certbot_result
+
+- name: Re-check if certificate exists (after potential acquisition)
+  stat:
+    path: /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem
+  register: cert_final_check
 
 - name: Check if HAProxy certificate bundle exists
   stat:
@@ -130,7 +143,7 @@
     cat /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem \
         /etc/letsencrypt/live/{{ plex_domain }}/privkey.pem \
         > /etc/haproxy/certs/{{ plex_domain }}.pem
-  when: cert_exists.stat.exists and not haproxy_bundle.stat.exists
+  when: cert_final_check.stat.exists and not haproxy_bundle.stat.exists
   notify: reload haproxy
 
 - name: Set permissions on certificate bundle
@@ -139,7 +152,7 @@
     mode: '0640'
     owner: root
     group: haproxy
-  when: cert_exists.stat.exists
+  when: cert_final_check.stat.exists
 
 - name: Start HAProxy after certificate acquisition
   systemd:

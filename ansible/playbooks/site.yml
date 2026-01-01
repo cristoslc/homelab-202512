@@ -26,6 +26,8 @@
       tags: ['security', 'base']
     - role: wireguard-server
       tags: ['wireguard', 'network']
+    - role: certbot
+      tags: ['certbot', 'ssl']
     - role: haproxy
       tags: ['haproxy', 'proxy']
     - role: ddclient

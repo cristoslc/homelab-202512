@@ -15,6 +15,7 @@ NC='\033[0m' # No Color
 # Parse command line arguments
 CLEAN=false
 AUTO_APPROVE=""
+STAGING=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -26,11 +27,16 @@ while [[ $# -gt 0 ]]; do
       AUTO_APPROVE="-auto-approve"
       shift
       ;;
+    --staging)
+      STAGING="-e letsencrypt_staging=true"
+      shift
+      ;;
     *)
       echo -e "${RED}Unknown option: $1${NC}"
-      echo "Usage: ./deploy.sh [--clean] [--auto-approve]"
+      echo "Usage: ./deploy.sh [--clean] [--auto-approve] [--staging]"
       echo "  --clean          Destroy and rebuild infrastructure from scratch"
       echo "  --auto-approve   Skip Terraform approval prompts"
+      echo "  --staging        Use Let's Encrypt staging environment (testing, no rate limits)"
       exit 1
       ;;
   esac
@@ -51,6 +57,15 @@ fi
 # Get repository root
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
+
+# Source .env file if it exists
+if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
+    echo -e "${GREEN}Loaded environment from .env${NC}"
+    echo ""
+fi
 
 # Step 0: Optional clean deployment
 if [ "$CLEAN" = true ]; then
@@ -187,7 +202,7 @@ if [ ! -f "playbooks/site.yml" ]; then
     exit 1
 fi
 
-ansible-playbook playbooks/site.yml
+ansible-playbook playbooks/site.yml $STAGING
 
 cd "$REPO_ROOT"
 echo -e "${GREEN}✓ Configuration complete${NC}"
@@ -198,12 +213,23 @@ echo "========================================="
 echo "  Deployment Complete!"
 echo "========================================="
 echo ""
+
+if [ -n "$STAGING" ]; then
+    echo -e "${YELLOW}⚠️  WARNING: Using Let's Encrypt STAGING certificates${NC}"
+    echo -e "${YELLOW}   Browsers will show certificate warnings (expected for testing)${NC}"
+    echo -e "${YELLOW}   For production, re-run without --staging flag${NC}"
+    echo ""
+fi
+
 echo "Next steps:"
 echo "  1. Verify deployment: ./scripts/validate-day1.sh"
 echo "  2. Check WireGuard tunnel: ansible bastion -m shell -a 'wg show'"
 echo "  3. Test Plex access: curl https://$PLEX_FQDN:32400/web"
 echo ""
-echo "Optional - Backup Let's Encrypt certificates:"
-echo "  ansible-playbook ansible/playbooks/backup-letsencrypt.yml"
-echo "  (Enables instant cert restore on future deployments, avoids rate limits)"
-echo ""
+
+if [ -z "$STAGING" ]; then
+    echo "Optional - Backup Let's Encrypt certificates:"
+    echo "  ansible-playbook ansible/playbooks/backup-letsencrypt.yml"
+    echo "  (Enables instant cert restore on future deployments, avoids rate limits)"
+    echo ""
+fi
