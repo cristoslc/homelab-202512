@@ -1,20 +1,27 @@
-# Homelab Infrastructure - Day 1: Plex Direct Connection
+# Homelab Infrastructure - Day 1: Media Server Direct Connection
 
 ## Overview
 
-Day 1 establishes the core bastion architecture to eliminate Plex relay usage and enable direct connections through a WireGuard tunnel. By end of day, Plex users connect directly to your home server with zero relay traffic.
+Day 1 establishes the core bastion architecture to eliminate Plex relay usage and enable direct connections through a WireGuard tunnel. By end of day, Plex and Jellyfin users connect directly to your home server with zero relay traffic.
 
-**Shipped Value**: Plex accessible via `plex.yourdomain.com` with direct connection through secure WireGuard tunnel.
+**Shipped Value**:
+- Plex accessible via `https://plex.yourdomain.com:32400`
+- Jellyfin accessible via `https://plex.yourdomain.com:8920`
+- Direct connection through secure WireGuard tunnel with SSL termination
 
 ## Architecture
 
 ```
 Internet → plex.yourdomain.com (Cloudflare DNS)
          → Bastion VPS (Hetzner, 10.8.0.1)
-           → WireGuard Tunnel (51820/udp)
+           ├─ HAProxy :32400 (SSL) → WireGuard → 10.8.0.2:32400 → Plex
+           └─ HAProxy :8920 (SSL)  → WireGuard → 10.8.0.2:8096  → Jellyfin
+
+           WireGuard Tunnel (51820/udp)
              → Home Docker Host (10.8.0.2)
-               → Docker Bridge Network
-                 → Plex Container (:32400)
+               → Docker Bridge Network (br-*)
+                 ├─ Plex Container (:32400)
+                 └─ Jellyfin Container (:8096)
 ```
 
 ### Key Design Decisions
@@ -22,7 +29,14 @@ Internet → plex.yourdomain.com (Cloudflare DNS)
 **WireGuard Deployment**: Systemd service on Docker host (not containerized)
 - Creates `wg0` interface at 10.8.0.2/24
 - Preserves Docker network isolation (no `network_mode: host`)
-- Standard port publishing: `-p 32400:32400`
+- Custom bridge support: iptables rules for br-+ interfaces
+- Standard port publishing: `-p 32400:32400`, `-p 8096:8096`
+
+**HAProxy SSL Termination**: Let's Encrypt certificates on bastion
+- SSL/TLS handled at internet edge (bastion)
+- Automatic certificate renewal via certbot
+- Backend traffic over encrypted WireGuard tunnel (HTTP)
+- Single certificate for both Plex and Jellyfin
 
 **DNS Automation**: Terraform Cloudflare provider
 - Zero manual DNS configuration
@@ -32,7 +46,7 @@ Internet → plex.yourdomain.com (Cloudflare DNS)
 **Infrastructure as Code**: Complete automation
 - Terraform: VPS provisioning + DNS
 - Ansible: Service configuration + deployment
-- Single command: `terraform apply && ansible-playbook site.yml`
+- Single command: `./scripts/deploy.sh`
 
 ## Day 1 Sessions
 
@@ -56,12 +70,13 @@ Internet → plex.yourdomain.com (Cloudflare DNS)
 ### Session 3: Bastion Playbook
 **Deliverables**:
 - `roles/wireguard-server/` - WireGuard server config, systemd service
-- `roles/haproxy/` - TCP forwarding to 10.8.0.2:32400
+- `roles/haproxy/` - SSL termination + forwarding to Plex/Jellyfin backends
+- `roles/certbot/` - Let's Encrypt certificate management
 - `roles/ddclient/` - Dynamic DNS updates (if home IP changes)
 - `roles/base-security/` - UFW, fail2ban, SSH hardening
 - `playbooks/bastion.yml` - Orchestrates bastion host configuration
 
-**Outputs**: Fully configured bastion VPS ready for tunnel
+**Outputs**: Fully configured bastion VPS with HTTPS endpoints
 
 ### Session 4: Home Server Playbook
 **Deliverables**:
@@ -69,9 +84,9 @@ Internet → plex.yourdomain.com (Cloudflare DNS)
 - `roles/plex-config/` - Plex container verification, network settings
 - `playbooks/homeserver.yml` - Configures home Docker host
 - Kernel forwarding: `net.ipv4.ip_forward=1`
-- Firewall rules: wg0 ↔ docker0 traffic
+- Firewall rules: wg0 ↔ docker0 and wg0 ↔ br-+ (custom bridges)
 
-**Outputs**: Home server connected to bastion via WireGuard
+**Outputs**: Home server connected to bastion, supports custom Docker networks
 
 ### Session 5: Deployment & Validation
 **Deliverables**:
@@ -98,8 +113,9 @@ Internet → plex.yourdomain.com (Cloudflare DNS)
 - Domain configured in Cloudflare
 
 **Existing Infrastructure**:
-- Docker host running Plex container
-- Plex published on port 32400
+- Docker host running Plex and/or Jellyfin containers
+- Plex published on port 32400 (if using Plex)
+- Jellyfin published on port 8096 (if using Jellyfin)
 - Home network with static or DDNS-updated IP
 
 ## Deployment
@@ -145,7 +161,9 @@ ansible bastion -m shell -a "ping -c 3 10.8.0.2"
 ./scripts/validate-day1.sh
 ```
 
-**External Test**: Access `http://plex.yourdomain.com:32400/web` from mobile network
+**External Test**:
+- Plex: `https://plex.yourdomain.com:32400/web` from mobile network
+- Jellyfin: `https://plex.yourdomain.com:8920` from mobile network
 
 ## Project Structure
 
@@ -173,6 +191,7 @@ homelab-202512/
 │   │   ├── wireguard-server/
 │   │   ├── wireguard-client/
 │   │   ├── haproxy/
+│   │   ├── certbot/
 │   │   ├── ddclient/
 │   │   ├── base-security/
 │   │   └── plex-config/
@@ -194,14 +213,18 @@ homelab-202512/
 
 ### Firewall Rules
 
-**Bastion (Hetzner)**:
-- 51820/udp: WireGuard (from home IP)
-- 32400/tcp: Plex (from 0.0.0.0/0)
-- 22/tcp: SSH (from trusted IPs)
+**Bastion (Hetzner Cloud + UFW)**:
+- 51820/udp: WireGuard (from 0.0.0.0/0)
+- 32400/tcp: Plex HTTPS (from 0.0.0.0/0)
+- 8920/tcp: Jellyfin HTTPS (from 0.0.0.0/0)
+- 80/tcp: HTTP (Let's Encrypt validation)
+- 22/tcp: SSH (from 0.0.0.0/0)
 
 **Home Server**:
 - wg0 → docker0: FORWARD ACCEPT
 - docker0 → wg0: FORWARD ACCEPT
+- wg0 → br-+: FORWARD ACCEPT (custom Docker bridges)
+- br-+ → wg0: FORWARD ACCEPT (custom Docker bridges)
 - Masquerading enabled for WireGuard subnet
 
 ## Troubleshooting
@@ -218,18 +241,26 @@ sudo ufw status
 sudo systemctl status wg-quick@wg0
 ```
 
-### Plex Not Accessible
+### Media Services Not Accessible
 ```bash
-# Test from bastion
+# Test Plex from bastion
 curl -I http://10.8.0.2:32400/web
+
+# Test Jellyfin from bastion
+curl -I http://10.8.0.2:8096
 
 # Check HAProxy forwarding
 sudo systemctl status haproxy
 sudo tail -f /var/log/haproxy.log
+ss -tlnp | grep haproxy
 
-# Verify Docker container
-docker ps | grep plex
+# Verify Docker containers
+docker ps | grep -E "plex|jellyfin"
 docker logs plex
+docker logs jellyfin
+
+# Check iptables rules for custom bridges
+sudo iptables -L FORWARD -v -n | grep br-
 ```
 
 ### DNS Not Resolving
