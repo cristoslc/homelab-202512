@@ -1,0 +1,91 @@
+---
+# Backup Let's Encrypt Certificates Playbook
+# Encrypts and stores certificates for portable deployments
+# Usage: ansible-playbook playbooks/backup-letsencrypt.yml
+# Requires: ANSIBLE_VAULT_PASSWORD environment variable
+
+- name: Backup Let's Encrypt Certificates from Bastion
+  hosts: bastion
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Check if letsencrypt directory exists
+      stat:
+        path: /etc/letsencrypt
+      register: letsencrypt_dir
+
+    - name: Fail if no certificates found
+      fail:
+        msg: "No /etc/letsencrypt directory found on bastion. Obtain certificates first."
+      when: not letsencrypt_dir.stat.exists
+
+    - name: Archive letsencrypt directory
+      archive:
+        path: /etc/letsencrypt
+        dest: /tmp/letsencrypt_backup.tar.gz
+        format: gz
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Fetch archive to local machine
+      fetch:
+        src: /tmp/letsencrypt_backup.tar.gz
+        dest: /tmp/{{ plex_domain }}_letsencrypt.tar.gz
+        flat: yes
+
+    - name: Cleanup temp archive on bastion
+      file:
+        path: /tmp/letsencrypt_backup.tar.gz
+        state: absent
+
+- name: Encrypt and Store Backup Locally
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  vars:
+    backup_dir: "{{ playbook_dir }}/../files/letsencrypt"
+    temp_archive: "/tmp/{{ hostvars[groups['bastion'][0]]['plex_domain'] }}_letsencrypt.tar.gz"
+    vault_archive: "{{ backup_dir }}/{{ hostvars[groups['bastion'][0]]['plex_domain'] }}_backup.tar.gz.vault"
+
+  tasks:
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Encrypt backup with ansible-vault
+      command: >
+        ansible-vault encrypt
+        --vault-password-file={{ playbook_dir }}/../.vault-pass.sh
+        --output={{ vault_archive }}
+        {{ temp_archive }}
+      environment:
+        ANSIBLE_VAULT_PASSWORD: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD') }}"
+
+    - name: Remove unencrypted temp file
+      file:
+        path: "{{ temp_archive }}"
+        state: absent
+
+    - name: Display success message
+      debug:
+        msg:
+          - "========================================="
+          - "  Certificate Backup Complete!"
+          - "========================================="
+          - ""
+          - "Encrypted backup saved to:"
+          - "  {{ vault_archive }}"
+          - ""
+          - "Next steps:"
+          - "  1. Commit to git: git add {{ backup_dir }}"
+          - "  2. Future deployments will automatically restore from this backup"
+          - "  3. No Let's Encrypt rate limits when rebuilding infrastructure!"
+          - ""
+          - "To verify encryption:"
+          - "  ansible-vault view {{ vault_archive }}"
+          - ""

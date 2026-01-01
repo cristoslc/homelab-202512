@@ -28,6 +28,9 @@ inventory/*.yml
 !inventory/hosts.example.yml
 group_vars/*/vault.yml
 host_vars/*/vault.yml
+# Allow encrypted vault files (safe to commit)
+!ansible/files/**/*.vault
+!.vault-pass.sh
 
 # SSH Keys & Certificates
 *.pem

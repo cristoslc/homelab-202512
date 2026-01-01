@@ -16,10 +16,95 @@
     owner: root
     group: haproxy
 
-- name: Check if certificate already exists
+# Attempt to restore from encrypted backup if it exists
+- name: Check for encrypted certificate backup
+  stat:
+    path: "{{ playbook_dir }}/../files/letsencrypt/{{ plex_domain }}_backup.tar.gz.vault"
+  register: cert_backup
+  delegate_to: localhost
+
+- name: Restore certificates from encrypted backup
+  block:
+    - name: Create temp directory for decryption
+      tempfile:
+        state: directory
+      register: temp_dir
+      delegate_to: localhost
+
+    - name: Decrypt backup locally
+      command: >
+        ansible-vault decrypt
+        --vault-password-file={{ playbook_dir }}/../.vault-pass.sh
+        --output={{ temp_dir.path }}/letsencrypt_backup.tar.gz
+        {{ playbook_dir }}/../files/letsencrypt/{{ plex_domain }}_backup.tar.gz.vault
+      delegate_to: localhost
+      environment:
+        ANSIBLE_VAULT_PASSWORD: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD') }}"
+
+    - name: Copy decrypted backup to bastion
+      copy:
+        src: "{{ temp_dir.path }}/letsencrypt_backup.tar.gz"
+        dest: /tmp/letsencrypt_backup.tar.gz
+        mode: '0600'
+
+    - name: Extract certificates to /etc/letsencrypt
+      unarchive:
+        src: /tmp/letsencrypt_backup.tar.gz
+        dest: /etc/
+        remote_src: yes
+        owner: root
+        group: root
+
+    - name: Cleanup temp files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/letsencrypt_backup.tar.gz
+        - "{{ temp_dir.path }}"
+      delegate_to: localhost
+      when: temp_dir is defined
+
+    - name: Log certificate restore
+      debug:
+        msg: "Restored Let's Encrypt certificates from encrypted backup"
+  when: cert_backup.stat.exists
+  rescue:
+    - name: Warn on restore failure
+      debug:
+        msg: "Certificate restore failed, will request new certificate from Let's Encrypt"
+
+- name: Check if certificate exists after restore attempt
   stat:
     path: /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem
   register: cert_exists
+
+- name: Check certificate expiry (7 days buffer)
+  command: openssl x509 -in /etc/letsencrypt/live/{{ plex_domain }}/cert.pem -noout -checkend 604800
+  register: cert_valid
+  failed_when: false
+  changed_when: false
+  when: cert_exists.stat.exists
+
+- name: Remove expired certificate
+  block:
+    - name: Log certificate expiration
+      debug:
+        msg: "Certificate has expired or expires within 7 days, removing and requesting new certificate"
+
+    - name: Remove expired letsencrypt directory
+      file:
+        path: /etc/letsencrypt
+        state: absent
+
+    - name: Update cert_exists flag
+      set_fact:
+        cert_exists:
+          stat:
+            exists: false
+  when:
+    - cert_exists.stat.exists
+    - cert_valid.rc != 0
 
 - name: Stop HAProxy temporarily for certificate acquisition
   systemd:
@@ -35,13 +120,18 @@
   when: not cert_exists.stat.exists
   register: certbot_result
 
+- name: Check if HAProxy certificate bundle exists
+  stat:
+    path: /etc/haproxy/certs/{{ plex_domain }}.pem
+  register: haproxy_bundle
+
 - name: Create HAProxy certificate bundle
   shell: |
     cat /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem \
         /etc/letsencrypt/live/{{ plex_domain }}/privkey.pem \
         > /etc/haproxy/certs/{{ plex_domain }}.pem
-  args:
-    creates: /etc/haproxy/certs/{{ plex_domain }}.pem
+  when: cert_exists.stat.exists and not haproxy_bundle.stat.exists
+  notify: reload haproxy
 
 - name: Set permissions on certificate bundle
   file:
@@ -49,6 +139,7 @@
     mode: '0640'
     owner: root
     group: haproxy
+  when: cert_exists.stat.exists
 
 - name: Start HAProxy after certificate acquisition
   systemd:
