@@ -271,46 +271,51 @@ backend plex_backend
 - Role templates include tasks/main.yml, handlers/main.yml, templates/, files/
 - Documentation on encrypting secrets with ansible-vault
 
-### Session 3: Bastion Playbook
-**Scope**: Complete bastion VPS configuration
+### Session 3: Bastion Base Configuration Playbook
+**Scope**: Configure base services on bastion VPS (WireGuard deferred to Session 5)
 **Deliverables**:
-- `ansible/roles/wireguard-server/` - WireGuard server installation and config
 - `ansible/roles/haproxy/` - HAProxy installation and TCP forwarding
 - `ansible/roles/ddclient/` - Dynamic DNS client configuration
 - `ansible/roles/base-security/` - UFW, fail2ban, SSH hardening
-- `ansible/playbooks/bastion.yml` - Orchestrates bastion roles
-- Fully configured bastion VPS ready for tunnel
+- `ansible/playbooks/bastion.yml` - Orchestrates bastion base roles
+- Fully configured bastion VPS base services (security, proxy, DNS) - testable and complete
 
 **Build Specification**:
-- wireguard-server: Install wireguard package, template /etc/wireguard/wg0.conf, enable wg-quick@wg0 service, configure PostUp/PostDown iptables rules
 - haproxy: Install haproxy, template /etc/haproxy/haproxy.cfg with plex frontend/backend, enable service
 - ddclient: Install ddclient, template /etc/ddclient.conf with Cloudflare API settings, enable service
 - base-security: Configure UFW (deny incoming except 22/51820/32400), install fail2ban with SSH jail, disable password auth in sshd_config, ensure SSH key auth only
-- Playbook runs roles in order: base-security → wireguard-server → haproxy → ddclient
+- Playbook runs roles in order: base-security → haproxy → ddclient
+- NOTE: WireGuard server role moved to Session 5 to enable complete standalone testing (requires client public key for peer config)
 
-### Session 4: Home Server Playbook
-**Scope**: Configure home Docker host for tunnel
+### Session 4: Home Server Plex Validation Playbook
+**Scope**: Validate Plex container configuration on home Docker host (WireGuard deferred to Session 5)
 **Deliverables**:
-- `ansible/roles/wireguard-client/` - WireGuard client installation and config
 - `ansible/roles/plex-config/` - Plex container verification
 - `ansible/playbooks/homeserver.yml` - Orchestrates home server roles
-- Home server connected to bastion via WireGuard
+- Validated Plex container configuration - testable and complete
 
 **Build Specification**:
-- wireguard-client: Install wireguard, template /etc/wireguard/wg0.conf (peer to bastion), enable wg-quick@wg0, set net.ipv4.ip_forward=1 in /etc/sysctl.conf, configure iptables for wg0 ↔ docker0 FORWARD ACCEPT
 - plex-config: Verify Plex container exists (docker ps), check port 32400 published, validate bridge network mode (not host), document any required network setting changes
 - Playbook runs locally on home server (ansible_connection: local) or via SSH if accessible
+- NOTE: WireGuard client role moved to Session 5 to enable complete standalone testing (requires server public key for peer config)
 
-### Session 5: Deployment and Validation
-**Scope**: End-to-end deployment and testing
+### Session 5: WireGuard Tunnel Orchestration and Complete Validation
+**Scope**: Add WireGuard to both hosts with key exchange orchestration, end-to-end deployment, and testing
 **Deliverables**:
-- `ansible/playbooks/site.yml` - Master playbook importing bastion.yml and homeserver.yml
+- `ansible/roles/wireguard-server/` - WireGuard server role (auto-generates keys, exposes public key via Ansible facts)
+- `ansible/roles/wireguard-client/` - WireGuard client role (auto-generates keys, consumes server public key)
+- `ansible/playbooks/site.yml` - Master orchestration playbook with 3-phase deployment
 - `scripts/deploy.sh` - Wrapper script: terraform apply → generate-inventory → ansible-playbook site.yml
 - `scripts/validate-day1.sh` - Validation suite
 - Working Plex direct connection validated from external network
 
 **Build Specification**:
-- site.yml imports bastion.yml, then homeserver.yml (order matters: bastion must exist first for peer config)
+- wireguard-server role: Install wireguard package, auto-generate server keys on first run (stored in /etc/wireguard/server_private.key), derive public key, template /etc/wireguard/wg0.conf, enable wg-quick@wg0 service, configure PostUp/PostDown iptables rules, expose wg_server_public_key as Ansible fact
+- wireguard-client role: Install wireguard, auto-generate client keys on first run (stored in /etc/wireguard/client_private.key), derive public key, template /etc/wireguard/wg0.conf (peer to bastion using server pubkey from hostvars), enable wg-quick@wg0, set net.ipv4.ip_forward=1 in /etc/sysctl.conf, configure iptables for wg0 ↔ docker0 FORWARD ACCEPT, expose wg_client_public_key as Ansible fact
+- site.yml 3-phase deployment:
+  Phase 1: Run bastion base configuration (base-security, haproxy, ddclient) + wireguard-server (generates server keys, exposes public key)
+  Phase 2: Run homeserver configuration (plex-config) + wireguard-client (consumes server pubkey via hostvars[bastion], generates client keys, exposes public key)
+  Phase 3: Update bastion WireGuard config with client pubkey from hostvars[homeserver], restart WireGuard to establish tunnel
 - deploy.sh has error handling, runs terraform/ansible in sequence, shows clear progress
 - validate-day1.sh tests:
   1. WireGuard tunnel status on both sides (ansible bastion -m shell -a "wg show")
@@ -320,6 +325,7 @@ backend plex_backend
   5. DNS resolution (dig plex.yourdomain.com)
   6. External access test (manual: phone on cellular network accessing plex.yourdomain.com:32400/web)
 - All tests pass, Plex shows direct connection in console (no relay)
+- Idempotency: Re-running site.yml uses existing keys and shows 0 changes
 
 ## Logical Dependency Chain
 
@@ -332,22 +338,22 @@ backend plex_backend
    - Outputs: Inventory file, WireGuard keys generated
 
 ### Service Configuration (Depends on Infrastructure)
-3. **Bastion Playbook (Session 3)** - Requires inventory and WireGuard keys
-   - Outputs: Bastion fully configured, WireGuard server running
-4. **Home Server Playbook (Session 4)** - Requires bastion WireGuard server to exist for peer config
-   - Outputs: Home server WireGuard client connected to bastion
+3. **Bastion Base Configuration (Session 3)** - Requires inventory, configures base services only (no WireGuard yet)
+   - Outputs: Bastion base services running (security, HAProxy, ddclient), fully testable standalone
+4. **Home Server Plex Validation (Session 4)** - Validates Plex container configuration (no WireGuard yet)
+   - Outputs: Plex container verified, fully testable standalone
 
-### Validation (Depends on Everything)
-5. **Deployment & Validation (Session 5)** - Requires all prior sessions complete
-   - Outputs: Validated working system, automated deployment process
+### WireGuard Tunnel & Validation (Depends on Everything)
+5. **WireGuard Orchestration & Validation (Session 5)** - Requires Sessions 1-4 complete, adds WireGuard roles to both hosts with key exchange
+   - Outputs: WireGuard tunnel established, validated working system, automated deployment process
 
 ### Atomic Buildable Features
-Each session produces a working artifact:
-- Session 1: VPS exists, DNS resolves
-- Session 2: Ansible can run (even if playbooks empty)
-- Session 3: Bastion services running (even if home server not connected yet)
-- Session 4: Tunnel established (even if validation scripts not written)
-- Session 5: Full system validated and automated
+Each session produces a fully working, testable artifact:
+- Session 1: VPS exists, DNS resolves (terraform apply succeeds, SSH works)
+- Session 2: Ansible framework ready (syntax checks pass, inventory generated)
+- Session 3: Bastion base services fully configured and running (HAProxy listening, ddclient active, firewall rules set) - 100% complete and testable
+- Session 4: Plex container validated (port published, bridge network confirmed) - 100% complete and testable
+- Session 5: WireGuard tunnel established on both hosts, full system validated and automated (first time all components work together)
 
 ## Risks and Mitigations
 

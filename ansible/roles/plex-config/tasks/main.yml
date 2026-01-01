@@ -49,3 +49,41 @@
   retries: 3
   delay: 5
   until: plex_health.status == 200
+
+- name: Inspect Plex container network mode
+  command: docker inspect {{ plex_container.stdout }} --format '{% raw %}{{.HostConfig.NetworkMode}}{% endraw %}'
+  register: plex_network_mode
+  changed_when: false
+  when: plex_container.stdout != ""
+
+- name: Display Plex network mode
+  debug:
+    msg: "Plex network mode: {{ plex_network_mode.stdout }}"
+  when: plex_container.stdout != ""
+
+- name: Verify Plex is using bridge network (not host)
+  assert:
+    that:
+      - plex_network_mode.stdout != "host"
+      - "'bridge' in plex_network_mode.stdout or 'default' in plex_network_mode.stdout"
+    fail_msg: "Plex container is using host network mode. This configuration requires bridge mode for WireGuard compatibility."
+    success_msg: "Plex container is correctly using bridge network mode."
+  when: plex_container.stdout != ""
+
+# Enable IP forwarding for WireGuard tunnel integration
+- name: Enable IPv4 forwarding in sysctl
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Verify IP forwarding is enabled
+  command: sysctl net.ipv4.ip_forward
+  register: ip_forward_status
+  changed_when: false
+
+- name: Display IP forwarding status
+  debug:
+    msg: "{{ ip_forward_status.stdout }}"

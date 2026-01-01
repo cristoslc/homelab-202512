@@ -14,6 +14,41 @@
     sysctl_set: yes
     reload: yes
 
+- name: Check if WireGuard private key exists
+  stat:
+    path: /etc/wireguard/client_private.key
+  register: wg_client_privkey_stat
+
+- name: Generate WireGuard client private key
+  shell: wg genkey
+  register: wg_client_privkey_generated
+  when: not wg_client_privkey_stat.stat.exists
+
+- name: Save WireGuard client private key
+  copy:
+    content: "{{ wg_client_privkey_generated.stdout }}"
+    dest: /etc/wireguard/client_private.key
+    mode: '0600'
+  when: not wg_client_privkey_stat.stat.exists
+
+- name: Read WireGuard client private key
+  slurp:
+    src: /etc/wireguard/client_private.key
+  register: wg_client_privkey_content
+
+- name: Set client private key fact
+  set_fact:
+    wg_client_private_key: "{{ wg_client_privkey_content.content | b64decode | trim }}"
+
+- name: Generate WireGuard client public key
+  shell: echo "{{ wg_client_private_key }}" | wg pubkey
+  register: wg_client_pubkey_generated
+  changed_when: false
+
+- name: Set client public key fact
+  set_fact:
+    wg_client_public_key: "{{ wg_client_pubkey_generated.stdout | trim }}"
+
 - name: Create WireGuard configuration
   template:
     src: wg0.conf.j2

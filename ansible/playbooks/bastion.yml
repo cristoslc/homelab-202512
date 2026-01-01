@@ -1,8 +1,9 @@
 ---
-# Bastion VPS Configuration
-# Configures WireGuard server, HAProxy, ddclient, and base security
+# Bastion VPS Base Configuration
+# Configures base security, HAProxy, and ddclient
+# NOTE: WireGuard server role is configured via site.yml (Task 10) to enable key exchange
 
-- name: Configure Bastion VPS
+- name: Configure Bastion VPS Base Services
   hosts: bastion
   become: yes
 
@@ -10,8 +11,8 @@
     - role: base-security
       tags: ['security', 'base']
 
-    - role: wireguard-server
-      tags: ['wireguard', 'network']
+    - role: certbot
+      tags: ['certbot', 'ssl']
 
     - role: haproxy
       tags: ['haproxy', 'proxy']
@@ -23,7 +24,13 @@
     - name: Display bastion configuration summary
       debug:
         msg:
-          - "Bastion VPS configured successfully"
-          - "WireGuard server: {{ wireguard_server_ip }}"
-          - "Listening on: {{ wireguard_port }}/udp"
-          - "HAProxy forwarding :32400 -> {{ wireguard_client_ip }}:32400"
+          - "Bastion VPS base configuration completed successfully"
+          - "Base security: UFW enabled, fail2ban active, SSH hardened"
+          - "SSL/TLS: Let's Encrypt certificate obtained for {{ plex_domain }}"
+          - "HAProxy: HTTPS on :32400 (SSL termination → forwards to {{ wireguard_client_ip }}:32400)"
+          - "ddclient: managing DNS for {{ plex_domain }}"
+          - ""
+          - "Access Plex: https://{{ plex_domain }}:32400"
+          - "NOTE: Configure Plex 'Custom server access URLs' to https://{{ plex_domain }}:32400"
+          - ""
+          - "NOTE: WireGuard server will be configured in site.yml (Task 10)"

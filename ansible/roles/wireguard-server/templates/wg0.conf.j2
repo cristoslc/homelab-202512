@@ -5,6 +5,8 @@ PrivateKey = {{ wg_server_private_key }}
 PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 
+{% if wg_client_public_key is defined %}
 [Peer]
 PublicKey = {{ wg_client_public_key }}
 AllowedIPs = 10.8.0.2/32
+{% endif %}

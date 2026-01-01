@@ -1,15 +1,13 @@
 ---
-# Home Server Configuration
-# Configures WireGuard client and validates Plex container
+# Home Server Plex Validation
+# Validates Plex container configuration
+# NOTE: WireGuard client role is configured via site.yml (Task 10) to enable key exchange
 
-- name: Configure Home Docker Host
+- name: Validate Home Docker Host Plex Configuration
   hosts: homeserver
   become: yes
 
   roles:
-    - role: wireguard-client
-      tags: ['wireguard', 'network']
-
     - role: plex-config
       tags: ['plex', 'validation']
 
@@ -17,7 +15,8 @@
     - name: Display home server configuration summary
       debug:
         msg:
-          - "Home Docker host configured successfully"
-          - "WireGuard client: {{ wireguard_client_ip }}"
-          - "Connected to bastion: {{ bastion_ip }}:{{ wireguard_port }}"
-          - "Plex container validated and accessible"
+          - "Home Docker host Plex validation completed successfully"
+          - "Plex container: port 32400 published on bridge network"
+          - "IP forwarding: enabled for future WireGuard integration"
+          - ""
+          - "NOTE: WireGuard client will be configured in site.yml (Task 10)"

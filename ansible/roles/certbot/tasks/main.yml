@@ -1,0 +1,82 @@
+---
+# Certbot role for Let's Encrypt SSL certificates
+- name: Install certbot and dependencies
+  apt:
+    name:
+      - certbot
+      - python3-certbot
+    state: present
+    update_cache: yes
+
+- name: Ensure HAProxy certs directory exists
+  file:
+    path: /etc/haproxy/certs
+    state: directory
+    mode: '0755'
+    owner: root
+    group: haproxy
+
+- name: Check if certificate already exists
+  stat:
+    path: /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem
+  register: cert_exists
+
+- name: Stop HAProxy temporarily for certificate acquisition
+  systemd:
+    name: haproxy
+    state: stopped
+  when: not cert_exists.stat.exists
+
+- name: Obtain Let's Encrypt certificate (standalone mode)
+  command: >
+    certbot certonly --standalone --non-interactive --agree-tos
+    --email {{ letsencrypt_email }}
+    -d {{ plex_domain }}
+  when: not cert_exists.stat.exists
+  register: certbot_result
+
+- name: Create HAProxy certificate bundle
+  shell: |
+    cat /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem \
+        /etc/letsencrypt/live/{{ plex_domain }}/privkey.pem \
+        > /etc/haproxy/certs/{{ plex_domain }}.pem
+  args:
+    creates: /etc/haproxy/certs/{{ plex_domain }}.pem
+
+- name: Set permissions on certificate bundle
+  file:
+    path: /etc/haproxy/certs/{{ plex_domain }}.pem
+    mode: '0640'
+    owner: root
+    group: haproxy
+
+- name: Start HAProxy after certificate acquisition
+  systemd:
+    name: haproxy
+    state: started
+  when: not cert_exists.stat.exists
+
+- name: Ensure renewal hooks directory exists
+  file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    mode: '0755'
+
+- name: Create certbot renewal hook for HAProxy
+  copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/haproxy-reload.sh
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      cat /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem \
+          /etc/letsencrypt/live/{{ plex_domain }}/privkey.pem \
+          > /etc/haproxy/certs/{{ plex_domain }}.pem
+      chmod 640 /etc/haproxy/certs/{{ plex_domain }}.pem
+      chown root:haproxy /etc/haproxy/certs/{{ plex_domain }}.pem
+      systemctl reload haproxy
+
+- name: Set up certbot auto-renewal timer
+  systemd:
+    name: certbot.timer
+    enabled: yes
+    state: started

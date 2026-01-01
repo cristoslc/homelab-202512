@@ -2,7 +2,7 @@
 # Master Orchestration Playbook
 # Deploys complete homelab infrastructure in correct order
 
-- name: Deploy Homelab Infrastructure
+- name: Display Deployment Banner
   hosts: localhost
   gather_facts: no
   tasks:
@@ -17,13 +17,66 @@
           - "  2. Home Server (WireGuard client, Plex validation)"
           - ""
 
+# Phase 1: Configure Bastion VPS
 - name: Configure Bastion VPS
-  import_playbook: bastion.yml
+  hosts: bastion
+  become: yes
+  roles:
+    - role: base-security
+      tags: ['security', 'base']
+    - role: wireguard-server
+      tags: ['wireguard', 'network']
+    - role: haproxy
+      tags: ['haproxy', 'proxy']
+    - role: ddclient
+      tags: ['ddclient', 'dns']
+  post_tasks:
+    - name: Display bastion configuration summary
+      debug:
+        msg:
+          - "Bastion VPS configured successfully"
+          - "WireGuard server: 10.8.0.1"
+          - "Server public key: {{ wg_server_public_key }}"
 
+# Phase 2: Configure Home Server (has access to bastion facts via hostvars)
 - name: Configure Home Server
-  import_playbook: homeserver.yml
+  hosts: homeserver
+  become: yes
+  vars:
+    wg_server_public_key: "{{ hostvars[groups['bastion'][0]]['wg_server_public_key'] }}"
+    bastion_ip: "{{ hostvars[groups['bastion'][0]]['ansible_host'] }}"
+  roles:
+    - role: wireguard-client
+      tags: ['wireguard', 'network']
+    - role: plex-config
+      tags: ['plex', 'media']
+  post_tasks:
+    - name: Display homeserver configuration summary
+      debug:
+        msg:
+          - "Home server configured successfully"
+          - "WireGuard client: 10.8.0.2"
+          - "Client public key: {{ wg_client_public_key }}"
 
-- name: Deployment Complete
+# Phase 3: Update bastion WireGuard config with client public key
+- name: Update Bastion WireGuard with Client Key
+  hosts: bastion
+  become: yes
+  vars:
+    wg_client_public_key: "{{ hostvars[groups['homeserver'][0]]['wg_client_public_key'] }}"
+  tasks:
+    - name: Update WireGuard configuration with client public key
+      template:
+        src: ../roles/wireguard-server/templates/wg0.conf.j2
+        dest: /etc/wireguard/wg0.conf
+        mode: '0600'
+
+    - name: Restart WireGuard to apply changes
+      systemd:
+        name: wg-quick@wg0
+        state: restarted
+
+- name: Display Deployment Complete
   hosts: localhost
   gather_facts: no
   tasks:
@@ -34,7 +87,7 @@
           - "  Deployment Complete!"
           - "========================================="
           - "Next steps:"
-          - "  1. Verify WireGuard tunnel: ssh bastion 'wg show'"
-          - "  2. Test connectivity: ping {{ wireguard_client_ip }}"
+          - "  1. Verify WireGuard tunnel: ansible bastion -m shell -a 'wg show'"
+          - "  2. Test connectivity from bastion: ansible bastion -m shell -a 'ping -c 3 10.8.0.2'"
           - "  3. Run validation: ./scripts/validate-day1.sh"
           - ""

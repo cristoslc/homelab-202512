@@ -1,0 +1,5 @@
+---
+# SSL/TLS Configuration
+
+# Let's Encrypt email for certificate notifications
+letsencrypt_email: admin@theblueroost.me

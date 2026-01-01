@@ -1,0 +1,13 @@
+---
+# Cloudflare Configuration for ddclient
+# These values should match your Terraform configuration
+
+# Cloudflare Zone (domain name) for ddclient
+# ddclient expects the zone name, not the zone ID
+cloudflare_zone: theblueroost.me
+
+# Cloudflare API Token (sensitive)
+# Get from: https://dash.cloudflare.com/profile/api-tokens
+# Required permissions: Zone.DNS (Edit)
+# TODO: Move this to ansible-vault for production
+cloudflare_api_token: REDACTED_TOKEN_REMOVED_FROM_HISTORY

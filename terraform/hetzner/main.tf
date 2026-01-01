@@ -49,6 +49,17 @@ resource "hcloud_firewall" "bastion" {
       "::/0"
     ]
   }
+
+  # HTTP (for Let's Encrypt certbot validation)
+  rule {
+    direction = "in"
+    protocol  = "tcp"
+    port      = "80"
+    source_ips = [
+      "0.0.0.0/0",
+      "::/0"
+    ]
+  }
 }
 
 # Bastion VPS
