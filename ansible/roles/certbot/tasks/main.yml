@@ -93,6 +93,39 @@
   changed_when: false
   when: cert_exists.stat.exists
 
+- name: Check if certificate is from staging
+  command: openssl x509 -in /etc/letsencrypt/live/{{ plex_domain }}/cert.pem -noout -issuer
+  register: cert_issuer
+  failed_when: false
+  changed_when: false
+  when: cert_exists.stat.exists
+
+- name: Detect staging certificate when production is requested
+  set_fact:
+    cert_is_staging: "{{ 'STAGING' in cert_issuer.stdout }}"
+  when: cert_exists.stat.exists
+
+- name: Remove staging certificate when production deployment
+  block:
+    - name: Log staging certificate removal
+      debug:
+        msg: "Removing staging certificate to obtain production certificate"
+
+    - name: Remove staging letsencrypt directory
+      file:
+        path: /etc/letsencrypt
+        state: absent
+
+    - name: Update cert_exists flag
+      set_fact:
+        cert_exists:
+          stat:
+            exists: false
+  when:
+    - cert_exists.stat.exists
+    - cert_is_staging | default(false)
+    - not (letsencrypt_staging | default(false))
+
 - name: Remove expired certificate
   block:
     - name: Log certificate expiration
@@ -133,17 +166,12 @@
     path: /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem
   register: cert_final_check
 
-- name: Check if HAProxy certificate bundle exists
-  stat:
-    path: /etc/haproxy/certs/{{ plex_domain }}.pem
-  register: haproxy_bundle
-
-- name: Create HAProxy certificate bundle
+- name: Create/Update HAProxy certificate bundle
   shell: |
     cat /etc/letsencrypt/live/{{ plex_domain }}/fullchain.pem \
         /etc/letsencrypt/live/{{ plex_domain }}/privkey.pem \
         > /etc/haproxy/certs/{{ plex_domain }}.pem
-  when: cert_final_check.stat.exists and not haproxy_bundle.stat.exists
+  when: cert_final_check.stat.exists
   notify: reload haproxy
 
 - name: Set permissions on certificate bundle
