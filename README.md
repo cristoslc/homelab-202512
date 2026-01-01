@@ -124,26 +124,31 @@ Internet → plex.yourdomain.com (Cloudflare DNS)
 
 1. **Configure Secrets**:
 ```bash
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-# Edit with your API tokens, domain, SSH key
+# Copy .env template and fill in your values
+cp .env.example .env
+vi .env  # Fill in all TF_VAR_* and Ansible variables
 ```
 
-2. **Terraform Provisioning**:
-```bash
-cd terraform
-terraform init
-terraform plan
-terraform apply
-```
+Required variables in `.env`:
+- `TF_VAR_hcloud_token` - Hetzner Cloud API token
+- `TF_VAR_cloudflare_api_token` - Cloudflare API token
+- `TF_VAR_cloudflare_zone_id` - Cloudflare Zone ID
+- `TF_VAR_domain` - Your domain name
+- `TF_VAR_ssh_public_key` - SSH public key for bastion access
+- `CLOUDFLARE_ZONE` - Domain name for ddclient (should match TF_VAR_domain)
+- `ANSIBLE_VAULT_PASSWORD` - Vault password for encrypted secrets
 
-3. **Generate Ansible Inventory**:
-```bash
-cd ../ansible
-./scripts/generate-inventory.sh
-```
+See `.env.example` for complete documentation and optional variables.
 
-4. **Ansible Deployment**:
+2. **Run Complete Deployment**:
 ```bash
+# Single command deploys everything
+./scripts/deploy.sh
+
+# Or run manually:
+source .env && export $(cat .env | xargs)
+cd terraform && terraform init && terraform plan && terraform apply
+cd ../ansible && ./scripts/generate-inventory.sh
 ansible-playbook playbooks/site.yml
 ```
 
@@ -170,11 +175,12 @@ ansible bastion -m shell -a "ping -c 3 10.8.0.2"
 ```
 homelab-202512/
 ├── README.md                    # This file
+├── .env                         # Secrets (gitignored, create from .env.example)
+├── .env.example                 # Template with all required variables
 ├── terraform/
 │   ├── main.tf                  # Root module
 │   ├── outputs.tf               # Bastion IP, DNS outputs
 │   ├── variables.tf             # Input variables
-│   ├── terraform.tfvars         # Secret values (gitignored)
 │   ├── hetzner/
 │   │   └── main.tf              # VPS, firewall, SSH keys
 │   └── cloudflare/

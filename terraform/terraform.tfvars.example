@@ -1,34 +1,40 @@
-# Copy this file to terraform.tfvars and fill in your actual values
-# terraform.tfvars is gitignored and will not be committed
+# =============================================================================
+# DEPRECATION NOTICE - This file is NO LONGER USED
+# =============================================================================
+#
+# All Terraform variables have been migrated to environment variables in .env
+# using the TF_VAR_* prefix. This approach provides:
+#
+# - Single source of truth for all secrets (.env file)
+# - Consistent pattern with Ansible configuration
+# - Easy migration to secrets managers in the future
+# - Better integration with deployment scripts
+#
+# MIGRATION STEPS:
+# 1. Copy .env.example to .env in the project root
+# 2. Fill in all TF_VAR_* variables with your actual values:
+#    - TF_VAR_hcloud_token
+#    - TF_VAR_cloudflare_api_token
+#    - TF_VAR_cloudflare_zone_id
+#    - TF_VAR_domain
+#    - TF_VAR_ssh_public_key
+# 3. Source the environment: set -a; source .env; set +a
+# 4. Run terraform commands as normal (they will auto-read TF_VAR_* variables)
+#
+# You can also use ./scripts/deploy.sh which automatically sources .env
+#
+# =============================================================================
 
-# Hetzner Cloud API Token
-# Get from: https://console.hetzner.cloud/ -> Project -> Security -> API Tokens
-hcloud_token = "YOUR_HETZNER_API_TOKEN_HERE"
+# This file is kept for reference only. See .env.example for current usage.
 
-# Cloudflare API Token
-# Get from: https://dash.cloudflare.com/profile/api-tokens
-# Required permissions: Zone.DNS (Edit)
-cloudflare_api_token = "YOUR_CLOUDFLARE_API_TOKEN_HERE"
-
-# Cloudflare Zone ID
-# Find in: https://dash.cloudflare.com/ -> Select your domain -> Overview (right sidebar)
-cloudflare_zone_id = "YOUR_CLOUDFLARE_ZONE_ID_HERE"
-
-# Your Domain
-# Example: "example.com"
-domain = "yourdomain.com"
-
-# Plex Subdomain (optional, default: plex)
-# This will create plex.yourdomain.com
-plex_subdomain = "plex"
-
-# SSH Public Key
-# Generate with: ssh-keygen -t ed25519 -C "bastion-plex"
-# Use the contents of ~/.ssh/id_ed25519.pub
-ssh_public_key = "ssh-ed25519 AAAAC3... your-email@example.com"
-
-# Server Configuration (optional, defaults provided)
-# server_name     = "bastion-plex"
-# server_type     = "cpx11"         # CPX11: 2 vCPU, 2GB RAM, ~€4-5/month (use cpx* for US locations, cx* for EU)
-# server_location = "ash"           # ash (Ashburn, VA), hil (Hillsboro, OR), nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki)
-# server_image    = "ubuntu-24.04"
+# Legacy configuration (DO NOT USE):
+# hcloud_token = "YOUR_HETZNER_API_TOKEN_HERE"
+# cloudflare_api_token = "YOUR_CLOUDFLARE_API_TOKEN_HERE"
+# cloudflare_zone_id = "YOUR_CLOUDFLARE_ZONE_ID_HERE"
+# domain = "yourdomain.com"
+# plex_subdomain = "plex"
+# ssh_public_key = "ssh-ed25519 AAAAC3... your-email@example.com"
+# server_name = "bastion-plex"
+# server_type = "cpx11"
+# server_location = "ash"
+# server_image = "ubuntu-24.04"

@@ -54,6 +54,42 @@ if [ -z "$ANSIBLE_VAULT_PASSWORD" ]; then
     echo ""
 fi
 
+# Validate required Terraform variables
+REQUIRED_TF_VARS=(
+    "TF_VAR_hcloud_token"
+    "TF_VAR_cloudflare_api_token"
+    "TF_VAR_cloudflare_zone_id"
+    "TF_VAR_domain"
+    "TF_VAR_ssh_public_key"
+)
+
+MISSING_VARS=()
+for var in "${REQUIRED_TF_VARS[@]}"; do
+    if [ -z "${!var}" ]; then
+        MISSING_VARS+=("$var")
+    fi
+done
+
+if [ ${#MISSING_VARS[@]} -gt 0 ]; then
+    echo -e "${RED}Error: Required Terraform environment variables not set${NC}"
+    echo "Missing variables:"
+    for var in "${MISSING_VARS[@]}"; do
+        echo "  - $var"
+    done
+    echo ""
+    echo "Please ensure .env contains all required TF_VAR_* variables"
+    echo "See .env.example for details"
+    exit 1
+fi
+
+# Validate required Ansible variables
+if [ -z "$CLOUDFLARE_ZONE" ]; then
+    echo -e "${RED}Error: CLOUDFLARE_ZONE not set${NC}"
+    echo "Please set CLOUDFLARE_ZONE in .env (should match TF_VAR_domain)"
+    echo "See .env.example for details"
+    exit 1
+fi
+
 # Get repository root
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -86,12 +122,6 @@ fi
 # Step 1: Terraform Apply
 echo -e "${BLUE}Step 1: Provisioning infrastructure with Terraform...${NC}"
 cd terraform
-
-if [ ! -f "terraform.tfvars" ]; then
-    echo -e "${RED}Error: terraform.tfvars not found${NC}"
-    echo "Please create terraform/terraform.tfvars from terraform.tfvars.example"
-    exit 1
-fi
 
 terraform init -upgrade
 terraform apply $AUTO_APPROVE

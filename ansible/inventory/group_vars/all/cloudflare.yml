@@ -1,13 +1,12 @@
 ---
 # Cloudflare Configuration for ddclient
-# These values should match your Terraform configuration
+# Sensitive values loaded from environment variables (see .env file in project root)
 
-# Cloudflare Zone (domain name) for ddclient
-# ddclient expects the zone name, not the zone ID
-cloudflare_zone: theblueroost.me
+# Cloudflare Zone (domain name)
+# Loaded from CLOUDFLARE_ZONE environment variable
+cloudflare_zone: "{{ lookup('env', 'CLOUDFLARE_ZONE') }}"
 
-# Cloudflare API Token (sensitive)
-# Get from: https://dash.cloudflare.com/profile/api-tokens
-# Required permissions: Zone.DNS (Edit)
-# TODO: Move this to ansible-vault for production
-cloudflare_api_token: REDACTED_TOKEN_REMOVED_FROM_HISTORY
+# Cloudflare API Token (shared with Terraform)
+# Loaded from TF_VAR_cloudflare_api_token environment variable
+# This token is used by both Terraform (DNS record creation) and Ansible (ddclient dynamic DNS)
+cloudflare_api_token: "{{ lookup('env', 'TF_VAR_cloudflare_api_token') }}"

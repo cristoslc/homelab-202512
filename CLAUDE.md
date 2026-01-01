@@ -109,12 +109,30 @@ ansible homeserver -m shell -a "ping -c 3 10.8.0.1"
 
 ## Secrets Management
 
-**Gitignored Files** (safe to store secrets):
-- `terraform/terraform.tfvars` - Hetzner API token, Cloudflare API token/zone ID, domain, SSH public key
-- `.env` - Task Master AI provider API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY)
+**Single Source of Truth**: `.env` file (gitignored)
 
-**Templates** (committed to repo):
-- `terraform/terraform.tfvars.example` - Copy this to `terraform.tfvars` and fill in secrets
+All secrets are centralized in the `.env` file in the project root:
+
+**Terraform Variables** (TF_VAR_* prefix):
+- `TF_VAR_hcloud_token` - Hetzner Cloud API token
+- `TF_VAR_cloudflare_api_token` - Cloudflare API token (shared with Ansible ddclient)
+- `TF_VAR_cloudflare_zone_id` - Cloudflare Zone ID
+- `TF_VAR_domain` - Your domain name
+- `TF_VAR_ssh_public_key` - SSH public key for bastion access
+- Optional: TF_VAR_plex_subdomain, TF_VAR_server_name, TF_VAR_server_type, etc.
+
+**Ansible Variables**:
+- `CLOUDFLARE_ZONE` - Domain name for ddclient (should match TF_VAR_domain)
+- `ANSIBLE_VAULT_PASSWORD` - Password for encrypting/decrypting WireGuard keys and certificates
+
+**Task Master AI** (optional):
+- `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`
+
+**Template** (committed to repo):
+- `.env.example` - Copy this to `.env` and fill in all values
+
+**Deployment**:
+The `./scripts/deploy.sh` script automatically sources `.env` and exports all variables for both Terraform and Ansible.
 
 ## Module Structure
 
