@@ -23,15 +23,19 @@ Internet → plex.yourdomain.com (Cloudflare DNS)
 
 ## Task Management
 
-This project uses **Task Master AI** (MCP server) to track implementation progress:
+This project uses **Beads** - a git-backed task management system designed for AI coding agents.
 
-- **View all tasks**: Use `mcp__taskmaster-ai__get_tasks` tool
-- **View specific task**: Use `mcp__taskmaster-ai__get_task` with task ID
-- **Update task status**: Use `mcp__taskmaster-ai__set_task_status` (statuses: pending, in-progress, done, blocked, deferred, cancelled)
-- **Task details**: See `.taskmaster/tasks/tasks.json`
-- **PRD**: See `.taskmaster/docs/prd.txt` for complete requirements
+**Common Beads Commands** (via `bd` CLI):
+- `bd ls` - List all tasks
+- `bd show <task-id>` - View specific task details
+- `bd add "Task description"` - Create new task
+- `bd done <task-id>` - Mark task as complete
+- `bd tree` - Display task dependency graph
+- `bd next` - Show next available task to work on
 
-**5 Day 1 Tasks**:
+**Task Storage**: Tasks are stored in `.beads/` directory (git-tracked JSONL format)
+
+**5 Day 1 Tasks** (Completed):
 1. Terraform Infrastructure (VPS + DNS)
 2. Ansible Repository Structure
 3. Bastion Playbook (WireGuard server, HAProxy, security)
@@ -40,59 +44,69 @@ This project uses **Task Master AI** (MCP server) to track implementation progre
 
 ## Common Commands
 
-### Terraform Operations
+### Primary Deployment Method
+
+**Always use the deploy script for infrastructure changes** - it handles environment loading, SSH waiting, DNS propagation, and inventory generation automatically:
+
+```bash
+# From repository root
+
+# Full deployment (Terraform + Ansible)
+./scripts/deploy.sh
+
+# Clean deployment (destroy and rebuild)
+./scripts/deploy.sh --clean
+
+# Auto-approve (skip Terraform prompts)
+./scripts/deploy.sh --auto-approve
+
+# Staging Let's Encrypt certificates (testing)
+./scripts/deploy.sh --staging
+
+# Combined flags
+./scripts/deploy.sh --clean --auto-approve --staging
+```
+
+### Direct Terraform Commands (For Validation/Read-Only Operations)
 
 ```bash
 # From repository root
 cd terraform
 
-# Initialize (first time only)
-terraform init
-
-# Preview changes
+# Preview changes (plan only, no apply)
 terraform plan
 
-# Apply infrastructure
-terraform apply
-
-# View outputs (used by Ansible)
+# View outputs (used by validation scripts)
 terraform output
 terraform output -json
 terraform output -raw bastion_ip
-
-# Destroy infrastructure
-terraform destroy
 
 # Validate Task 1 completion
 cd ..
 ./scripts/validate-task1.sh
 ```
 
-### Ansible Operations (Tasks 2-5)
+### Direct Ansible Commands (For Debugging/Development)
 
 ```bash
 # From repository root
 cd ansible
 
-# Generate inventory from Terraform outputs
-./scripts/generate-inventory.sh
-
-# Run complete deployment
-ansible-playbook playbooks/site.yml
-
-# Run bastion configuration only
-ansible-playbook playbooks/bastion.yml
-
-# Run home server configuration only
-ansible-playbook playbooks/homeserver.yml
-
-# Ad-hoc commands
+# Ad-hoc debugging commands
 ansible bastion -m shell -a "wg show"
 ansible homeserver -m shell -a "ping -c 3 10.8.0.1"
+ansible all -m ping
+
+# Development: test individual playbooks
+ansible-playbook playbooks/bastion.yml
+ansible-playbook playbooks/homeserver.yml
 
 # Validate Day 1 completion
+cd ..
 ./scripts/validate-day1.sh
 ```
+
+**Note**: For production deployments, always use `./scripts/deploy.sh`. Direct Terraform/Ansible commands are provided for development iteration, debugging, and validation only.
 
 ## Network Configuration
 
@@ -124,9 +138,6 @@ All secrets are centralized in the `.env` file in the project root:
 **Ansible Variables**:
 - `CLOUDFLARE_ZONE` - Domain name for ddclient (should match TF_VAR_domain)
 - `ANSIBLE_VAULT_PASSWORD` - Password for encrypting/decrypting WireGuard keys and certificates
-
-**Task Master AI** (optional):
-- `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`
 
 **Template** (committed to repo):
 - `.env.example` - Copy this to `.env` and fill in all values
