@@ -36,7 +36,7 @@ resource "null_resource" "cleanup_duplicate_dns" {
   }
 }
 
-# DNS A Record for Plex
+# DNS A Record for Plex (DNS-only for optimal streaming)
 resource "cloudflare_record" "plex" {
   zone_id         = var.cloudflare_zone_id
   name            = var.plex_subdomain
@@ -49,4 +49,17 @@ resource "cloudflare_record" "plex" {
   comment = "Plex direct connection via bastion - managed by Terraform"
 
   depends_on = [null_resource.cleanup_duplicate_dns]
+}
+
+# DNS A Record for Jellyseerr (Proxied for DDoS protection)
+resource "cloudflare_record" "jellyseerr" {
+  zone_id         = var.cloudflare_zone_id
+  name            = "requests"
+  content         = var.bastion_ip
+  type            = "A"
+  ttl             = 1    # Auto (required when proxied = true)
+  proxied         = true # Orange cloud: DDoS protection, WAF, bot mitigation
+  allow_overwrite = true
+
+  comment = "Jellyseerr via Cloudflare proxy - managed by Terraform (Day 1.5)"
 }

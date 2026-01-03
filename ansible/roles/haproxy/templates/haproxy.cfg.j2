@@ -45,3 +45,46 @@ backend jellyfin_backend
     option httpchk GET /health
     http-check expect status 200
     server jellyfin_home 10.8.0.2:8096 check
+
+# HTTPS frontend - Port 443 with SNI filtering for Jellyseerr (Day 1.5)
+frontend https_443
+    bind *:443
+    mode tcp
+    option tcplog
+
+    # Enhanced logging for security monitoring
+    log-format "%ci:%cp [%t] %ft %b/%s %Tw/%Tc/%Tt %B %ts %ac/%fc/%bc/%sc/%rc %sq/%bq %{+Q}r"
+
+    # Rate limiting: max 20 connections per second per IP
+    stick-table type ip size 100k expire 30s store conn_rate(10s)
+    tcp-request connection track-sc0 src
+    tcp-request connection reject if { sc_conn_rate(0) gt 20 }
+
+    # Inspect TLS SNI without decryption
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req_ssl_hello_type 1 }
+
+    # Only allow requests.theblueroost.me
+    acl is_jellyseerr req_ssl_sni -i requests.{{ plex_domain | regex_replace('^watch\\.', '') }}
+
+    # Edge case: clients that don't send SNI (old browsers, bots)
+    acl has_sni req_ssl_sni -m found
+
+    # Route allowed traffic, reject others with logging
+    use_backend home_caddy if is_jellyseerr
+    use_backend reject_no_sni if !has_sni
+    default_backend reject_connection
+
+backend home_caddy
+    mode tcp
+    server homelab 10.8.0.2:8443 check
+
+backend reject_connection
+    mode tcp
+    # No server configured - connection rejected
+    # Logged for security monitoring
+
+backend reject_no_sni
+    mode tcp
+    # Reject connections without SNI (legacy clients or scanners)
+    # Logged separately for analysis

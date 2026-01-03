@@ -72,6 +72,81 @@ Backups:
 - Node Exporter: Metrics from both hosts
 - WireGuard Exporter: Tunnel health metrics
 
+### Certificate Monitoring (Added from Day 1.5)
+
+**Requirements:**
+- Monitor Let's Encrypt certificate expiry for all public services
+- Alert 7 days before expiration (early warning)
+- Alert 3 days before expiration (critical)
+- Track Caddy auto-renewal success/failure
+- Validate certificate chain and issuer
+
+**Services to Monitor:**
+- `requests.theblueroost.me` (Jellyseerr via Caddy - Day 1.5)
+- `watch.theblueroost.me` (Jellyfin via certbot - Day 1)
+- Future services added on Days 2-3
+
+**Implementation Options:**
+
+1. **Prometheus Blackbox Exporter** (RECOMMENDED)
+   ```yaml
+   # Add to prometheus.yml
+   - job_name: 'certificate-expiry'
+     metrics_path: /probe
+     params:
+       module: [http_2xx]
+     static_configs:
+       - targets:
+         - https://requests.theblueroost.me
+         - https://watch.theblueroost.me
+     relabel_configs:
+       - source_labels: [__address__]
+         target_label: __param_target
+       - source_labels: [__param_target]
+         target_label: instance
+       - target_label: __address__
+         replacement: 127.0.0.1:9115
+   ```
+
+   **Alert Rule:**
+   ```yaml
+   - alert: SSLCertExpiringSoon
+     expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 7
+     for: 1h
+     labels:
+       severity: warning
+     annotations:
+       summary: "SSL certificate expires in {{ $value | humanizeDuration }}"
+
+   - alert: SSLCertExpiringCritical
+     expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 3
+     for: 1h
+     labels:
+       severity: critical
+     annotations:
+       summary: "SSL certificate expires in {{ $value | humanizeDuration }}"
+   ```
+
+2. **Caddy Metrics Exporter**
+   - Expose Caddy metrics endpoint
+   - Monitor certificate validity and renewal status
+   - Track renewal failures
+
+3. **External Monitoring** (Supplementary)
+   - SSL Labs API checks (weekly)
+   - Certificate Transparency log monitoring
+   - Third-party uptime monitoring (SSL checks included)
+
+**Validation:**
+- Manually expire a cert in test environment, verify alert fires
+- Test alert delivery to notification channel
+- Verify renewal success is logged and visible in Grafana
+
+**Documentation:**
+- Runbook entry: "SSL Certificate Renewal Failure Response"
+- Dashboard: Certificate expiry panel with days remaining
+- Playbook: Manual certificate renewal procedure (if Caddy auto-renewal fails)
+
 ### Backup Strategy
 - Tool: Restic
 - Storage: Backblaze B2 or AWS S3

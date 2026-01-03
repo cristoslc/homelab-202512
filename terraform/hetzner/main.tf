@@ -61,6 +61,17 @@ resource "hcloud_firewall" "bastion" {
     ]
   }
 
+  # HTTPS (Jellyseerr via HAProxy SNI filtering - Day 1.5)
+  rule {
+    direction = "in"
+    protocol  = "tcp"
+    port      = "443"
+    source_ips = [
+      "0.0.0.0/0",
+      "::/0"
+    ]
+  }
+
   # HTTP (for Let's Encrypt certbot validation)
   rule {
     direction = "in"
