@@ -18,6 +18,16 @@ output "plex_fqdn" {
   value       = module.cloudflare.plex_fqdn
 }
 
+output "jellyseerr_fqdn" {
+  description = "Fully qualified domain name for Jellyseerr"
+  value       = module.cloudflare.jellyseerr_fqdn
+}
+
+output "jellyseerr_proxied" {
+  description = "Whether Jellyseerr DNS is proxied through Cloudflare"
+  value       = module.cloudflare.jellyseerr_proxied
+}
+
 output "wireguard_port" {
   description = "WireGuard port (static)"
   value       = 51820

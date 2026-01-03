@@ -52,8 +52,8 @@ frontend https_443
     mode tcp
     option tcplog
 
-    # Enhanced logging for security monitoring
-    log-format "%ci:%cp [%t] %ft %b/%s %Tw/%Tc/%Tt %B %ts %ac/%fc/%bc/%sc/%rc %sq/%bq %{+Q}r"
+    # Enhanced logging for security monitoring (TCP mode compatible)
+    log-format "%ci:%cp [%t] %ft %b/%s %Tw/%Tc/%Tt %B %ts %ac/%fc/%bc/%sc/%rc %sq/%bq"
 
     # Rate limiting: max 20 connections per second per IP
     stick-table type ip size 100k expire 30s store conn_rate(10s)

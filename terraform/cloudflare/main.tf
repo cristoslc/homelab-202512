@@ -51,15 +51,36 @@ resource "cloudflare_record" "plex" {
   depends_on = [null_resource.cleanup_duplicate_dns]
 }
 
+# Cleanup script for Jellyseerr DNS record
+resource "null_resource" "cleanup_jellyseerr_dns" {
+  triggers = {
+    bastion_ip = var.bastion_ip
+    zone_id    = var.cloudflare_zone_id
+    subdomain  = "requests"
+    zone_name  = data.cloudflare_zone.domain.name
+  }
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/cleanup-jellyseerr.sh"
+    environment = {
+      CF_API_TOKEN = var.cloudflare_api_token
+      CF_ZONE_ID   = var.cloudflare_zone_id
+      DNS_NAME     = "requests.${data.cloudflare_zone.domain.name}"
+      NEW_IP       = var.bastion_ip
+    }
+  }
+}
+
 # DNS A Record for Jellyseerr (Proxied for DDoS protection)
 resource "cloudflare_record" "jellyseerr" {
-  zone_id         = var.cloudflare_zone_id
-  name            = "requests"
-  content         = var.bastion_ip
-  type            = "A"
-  ttl             = 1    # Auto (required when proxied = true)
-  proxied         = true # Orange cloud: DDoS protection, WAF, bot mitigation
-  allow_overwrite = true
+  zone_id = var.cloudflare_zone_id
+  name    = "requests"
+  content = var.bastion_ip
+  type    = "A"
+  ttl     = 1    # Auto (required when proxied = true)
+  proxied = true # Orange cloud: DDoS protection, WAF, bot mitigation
 
   comment = "Jellyseerr via Cloudflare proxy - managed by Terraform (Day 1.5)"
+
+  depends_on = [null_resource.cleanup_jellyseerr_dns]
 }
