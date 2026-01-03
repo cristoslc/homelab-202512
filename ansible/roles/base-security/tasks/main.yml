@@ -50,6 +50,12 @@
     port: '80'
     proto: tcp
 
+- name: Allow HTTPS through UFW (for Jellyseerr - Day 1.5)
+  ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
+
 - name: Enable UFW
   ufw:
     state: enabled
